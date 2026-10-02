@@ -1,0 +1,4 @@
+Upstream: https://github.com/leopard627/fire-your-seo-agency
+Release: fire-your-seo-agency--v1.2.1
+Commit: 5f7249f7eff119703f2a509d0dc5e21b7b3ccc4c
+GJC integration: reviewed adaptation; not the Claude Code installer.

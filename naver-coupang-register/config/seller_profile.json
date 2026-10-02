@@ -1,0 +1,54 @@
+{
+  "_note": "판매자 고정값. 값이 null 이면 첫 등록 때 사용자에게 한 번 묻고 이 파일에 저장한다. 비밀번호·API secret·인증번호는 절대 저장하지 않는다.",
+  "seller": {
+    "shipFromAddress": "인천광역시 검단구 완정로 146 (리더스빌) 2층 208-43c호",
+    "zipCode": "23466",
+    "returnAddress": "인천광역시 검단구 완정로 146 (리더스빌) 2층 208-43c호",
+    "asPhone": null,
+    "asGuide": "판매자 고객센터 및 1:1 문의(네이버 톡톡 / 쿠팡 문의)",
+    "ownBrands": ["끄롱마제"]
+  },
+  "sourceFolders": {
+    "makerDoneRoot": "C:\\Users\\imda0\\Downloads\\완료된폴더",
+    "makerProgram": "C:\\Users\\imda0\\Desktop\\커서 ai 폴더\\detail_page_automation_gui",
+    "ihoLectureAnalysis": "C:\\Users\\imda0\\Desktop\\네이버SEO_전문가_작업완료_20260813\\강의분석_보고서",
+    "ihoTranscripts": "C:\\Users\\imda0\\Desktop\\커서 ai 폴더\\이호_강의_분석\\transcripts",
+    "legacyDesktopSkill": "C:\\Users\\imda0\\Desktop\\네이버_쿠팡_수동등록_스킬"
+  },
+  "pricing": {
+    "_note": "원가(공급가)가 확인될 때만 자동 계산한다. 원가를 모르면 판매가를 사용자에게 묻는다.",
+    "marginRate": 0.35,
+    "cnyToKrw": 200,
+    "shippingCostKrw": 3500,
+    "roundTo": 100,
+    "coupangOriginalPriceRatio": 1.25
+  },
+  "naver": {
+    "createUrl": "https://sell.smartstore.naver.com/#/products/create",
+    "courier": "CJ대한통운",
+    "shippingFeeType": "유료",
+    "shippingFee": 3500,
+    "returnFee": 3500,
+    "exchangeFee": 7000,
+    "stockPerOption": 999,
+    "originDefault": "수입산 > 아시아 > 중국",
+    "taxType": "과세상품",
+    "condition": "신상품"
+  },
+  "coupang": {
+    "createUrl": "https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2",
+    "keywordToolUrl": "https://wing.coupang.com/tenants/rfm-ss/coupang-trends/popularity-search?keyword=",
+    "courier": "CJ대한통운",
+    "deliveryMethodDomestic": "일반배송(순차배송)",
+    "deliveryMethodOverseas": "해외구매대행",
+    "shippingChargeType": "무료배송",
+    "initialReturnFee": 3500,
+    "returnFee": 3500,
+    "outboundDaysDomestic": 2,
+    "outboundDaysOverseas": 10,
+    "stockPerOption": 999,
+    "maxBuyPerPerson": 0,
+    "originDefault": "중국",
+    "taxType": "과세"
+  }
+}

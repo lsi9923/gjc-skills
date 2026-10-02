@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "메이커 온라인 셀링 도우미 × 네이버 SEO PRO",
+  "version": "1.1.0",
+  "description": "네이버쇼핑 카테고리 Relevance 1.0 실측, 공식 연관검색어, 25-30자 상품명 생성 및 스마트스토어 센터 Auto-fill 도우미",
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "clipboardRead",
+    "clipboardWrite"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://search.shopping.naver.com/search/*",
+        "*://www.coupang.com/np/search*"
+      ],
+      "all_frames": true,
+      "run_at": "document_end",
+      "js": [
+        "content-scripts/content.js"
+      ]
+    },
+    {
+      "matches": [
+        "*://sell.smartstore.naver.com/*"
+      ],
+      "all_frames": false,
+      "run_at": "document_end",
+      "js": [
+        "content-scripts/smartstore-autofill.js"
+      ]
+    }
+  ]
+}

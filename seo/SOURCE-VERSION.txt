@@ -1,0 +1,4 @@
+Upstream: https://github.com/AgriciDaniel/claude-seo
+Tag: v2.4.0
+Commit: e77e783e38eeb738424eb72117abbd2dacdd88af
+GJC packaging: native skill adaptation; upstream Unix/PowerShell installers not run.

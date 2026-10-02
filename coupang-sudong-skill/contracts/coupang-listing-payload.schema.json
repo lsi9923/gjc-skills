@@ -1,0 +1,229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CoupangWingListingPayload",
+  "description": "쿠팡 윙(Coupang Wing) 수동 상품등록 11대 섹션 48개 필드 전수 페이로드 규격",
+  "type": "object",
+  "required": [
+    "displayCategoryCode",
+    "sellerProductName",
+    "displayProductName",
+    "brand",
+    "manufacture",
+    "salePrice",
+    "originalPrice",
+    "stockQuantity",
+    "deliveryMethod",
+    "deliveryCompanyCode",
+    "deliveryCharge",
+    "outboundShippingTimeDay",
+    "pccNeeded",
+    "emptyBarcode",
+    "emptyBarcodeReason",
+    "searchTags",
+    "images",
+    "notices",
+    "attributes",
+    "contents"
+  ],
+  "properties": {
+    "displayCategoryCode": {
+      "type": "integer",
+      "description": "쿠팡 노출 카테고리 숫자 코드"
+    },
+    "sellerProductName": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 100,
+      "description": "등록상품명 (60~90자 권장 롱테일 키워드 고밀도 조합, 최대 100자)"
+    },
+    "displayProductName": {
+      "type": "string",
+      "maxLength": 100,
+      "description": "쿠팡 노출상품명 (브랜드 + 상품명 + 속성 결합)"
+    },
+    "generalProductName": {
+      "type": "string",
+      "description": "일반상품명 (카탈로그 매칭 기본명)"
+    },
+    "brand": {
+      "type": "string",
+      "default": "자체제작",
+      "description": "브랜드명 (없으면 노브랜드)"
+    },
+    "manufacture": {
+      "type": "string",
+      "default": "협력업체",
+      "description": "제조사명 (모르면 브랜드명과 동일)"
+    },
+    "modelName": {
+      "type": "string",
+      "description": "모델명"
+    },
+    "salePrice": {
+      "type": "integer",
+      "minimum": 100,
+      "description": "실제 판매가 (쿠팡가, 원 단위)"
+    },
+    "originalPrice": {
+      "type": "integer",
+      "minimum": 100,
+      "description": "할인 기준 정상가 (판매가 대비 20~30% 높은 정가)"
+    },
+    "stockQuantity": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 999,
+      "description": "기본 재고 수량"
+    },
+    "maximumBuyForPerson": {
+      "type": "integer",
+      "default": 0,
+      "description": "인당 최대구매수량 (0: 제한 없음)"
+    },
+    "adultOnly": {
+      "type": "string",
+      "enum": ["EVERYONE", "ADULT_ONLY"],
+      "default": "EVERYONE",
+      "description": "미성년자 구매 가능 여부"
+    },
+    "taxType": {
+      "type": "string",
+      "enum": ["TAX", "FREE"],
+      "default": "TAX",
+      "description": "과세 여부"
+    },
+    "deliveryMethod": {
+      "type": "string",
+      "enum": ["AGENT_BUY", "SEQUENCIAL"],
+      "default": "AGENT_BUY",
+      "description": "배송 방법 (AGENT_BUY: 해외구매대행, SEQUENCIAL: 일반순차배송)"
+    },
+    "deliveryCompanyCode": {
+      "type": "string",
+      "default": "CJGLS",
+      "description": "택배사 코드 (CJGLS, HANJIN, EPOST 등)"
+    },
+    "deliveryChargeType": {
+      "type": "string",
+      "enum": ["FREE", "NOT_FREE", "CHARGE_RECEIVED", "CONDITIONAL_FREE"],
+      "default": "NOT_FREE",
+      "description": "배송비 종류"
+    },
+    "deliveryCharge": {
+      "type": "integer",
+      "default": 3500,
+      "description": "기본 배송비"
+    },
+    "outboundShippingTimeDay": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 30,
+      "default": 7,
+      "description": "출고소요일 (해외구매대행은 배송지연 패널티 방지를 위해 7~14일 설정 필수)"
+    },
+    "pccNeeded": {
+      "type": "boolean",
+      "default": true,
+      "description": "개인통관고유부호 필수 수집 여부 (구매대행 시 필수 true)"
+    },
+    "overseasPurchased": {
+      "type": "string",
+      "enum": ["OVERSEAS_PURCHASED", "NOT_OVERSEAS_PURCHASED"],
+      "default": "OVERSEAS_PURCHASED",
+      "description": "해외구매대행 상품 표기"
+    },
+    "emptyBarcode": {
+      "type": "boolean",
+      "default": true,
+      "description": "바코드 없음 여부"
+    },
+    "emptyBarcodeReason": {
+      "type": "string",
+      "default": "해외구매대행 상품으로 바코드가 없습니다.",
+      "description": "바코드 없음 사유"
+    },
+    "searchTags": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 20,
+      "description": "상품 검색어 정확히 20개 꽉 채움 (각 20자 이내)",
+      "items": { "type": "string", "maxLength": 20 }
+    },
+    "options": {
+      "type": "array",
+      "description": "옵션별 상세 목록 (최대 200개)",
+      "items": {
+        "type": "object",
+        "required": ["itemName", "salePrice", "originalPrice", "maximumBuyCount"],
+        "properties": {
+          "itemName": { "type": "string", "maxLength": 150 },
+          "salePrice": { "type": "integer" },
+          "originalPrice": { "type": "integer" },
+          "maximumBuyCount": { "type": "integer" },
+          "attributes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["attributeTypeName", "attributeValueName"],
+              "properties": {
+                "attributeTypeName": { "type": "string" },
+                "attributeValueName": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "images": {
+      "type": "object",
+      "required": ["representative"],
+      "properties": {
+        "representative": { "type": "string", "description": "1000x1000 대표이미지 URL" },
+        "details": {
+          "type": "array",
+          "maxItems": 9,
+          "description": "추가/상세이미지 최대 9장",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "notices": {
+      "type": "array",
+      "description": "카테고리별 상품정보제공고시 세부 항목 (35개 품목군 매칭)",
+      "items": {
+        "type": "object",
+        "required": ["noticeCategoryName", "noticeCategoryDetailName", "content"],
+        "properties": {
+          "noticeCategoryName": { "type": "string" },
+          "noticeCategoryDetailName": { "type": "string" },
+          "content": { "type": "string" }
+        }
+      }
+    },
+    "attributes": {
+      "type": "array",
+      "description": "카테고리별 검색필터 속성 (색상, 사이즈, 소재, 용도 등)",
+      "items": {
+        "type": "object",
+        "required": ["attributeTypeName", "attributeValueName"],
+        "properties": {
+          "attributeTypeName": { "type": "string" },
+          "attributeValueName": { "type": "string" }
+        }
+      }
+    },
+    "contents": {
+      "type": "string",
+      "description": "모바일 반응형 상세설명 HTML 본문"
+    },
+    "returns": {
+      "type": "object",
+      "required": ["returnCharge", "returnShippingCharge", "returnAddress"],
+      "properties": {
+        "returnCharge": { "type": "integer", "default": 3500 },
+        "returnShippingCharge": { "type": "integer", "default": 7000 },
+        "returnAddress": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SmartStoreListingPayload",
+  "description": "네이버 스마트스토어 수동등록 20개 필수/권장 항목 페이로드 스키마",
+  "type": "object",
+  "required": [
+    "category",
+    "productName",
+    "salePrice",
+    "stockQuantity",
+    "tags",
+    "shipping",
+    "origin",
+    "detailHtml"
+  ],
+  "properties": {
+    "category": {
+      "type": "string",
+      "description": "네이버쇼핑 카테고리 (대분류 > 중분류 > 소분류 > 세분류)"
+    },
+    "productName": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 50,
+      "description": "공백 포함 25~30자 권장 최적화 상품명"
+    },
+    "salePrice": {
+      "type": "integer",
+      "minimum": 100,
+      "description": "판매가 (원 단위, 마진/수수료 계산 반영)"
+    },
+    "stockQuantity": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 999,
+      "description": "재고 수량"
+    },
+    "options": {
+      "type": "array",
+      "description": "옵션 그룹 목록",
+      "items": {
+        "type": "object",
+        "required": ["groupName", "values"],
+        "properties": {
+          "groupName": { "type": "string" },
+          "values": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "description": "네이버 실측 연관검색어 기반 태그 사전 등록 태그 최대 10개",
+      "items": { "type": "string" }
+    },
+    "detailHtml": {
+      "type": "string",
+      "description": "상세설명 HTML (후킹 -> 특장점 -> 스펙표 -> 배송/A/S)"
+    },
+    "origin": {
+      "type": "string",
+      "default": "중국",
+      "description": "원산지"
+    },
+    "brand": {
+      "type": "string",
+      "default": "자체제작",
+      "description": "브랜드명"
+    },
+    "manufacturer": {
+      "type": "string",
+      "default": "협력업체",
+      "description": "제조사"
+    },
+    "shipping": {
+      "type": "object",
+      "required": ["feeType", "fee", "returnFee", "exchangeFee", "outboundAddress"],
+      "properties": {
+        "feeType": { "type": "string", "enum": ["FREE", "PAID", "CONDITIONAL"] },
+        "fee": { "type": "integer", "default": 3500 },
+        "returnFee": { "type": "integer", "default": 3500 },
+        "exchangeFee": { "type": "integer", "default": 7000 },
+        "outboundAddress": { "type": "string" }
+      }
+    },
+    "seo": {
+      "type": "object",
+      "properties": {
+        "pageTitle": { "type": "string" },
+        "metaDescription": { "type": "string" }
+      }
+    }
+  }
+}
