@@ -51,3 +51,10 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
     5) 1688 예상 도매가(위안) 기반 수입원가 환산 및 목표 순마진율 40%+ 실측 검증
     6) KC/식약처/생활화학 인증 우회 및 최소비용 통관 전략
     7) 1688 중국 공장 왕왕/위챗 발송용 중문 및 한국어 문의문 생성
+
+## 6. 전체 스킬 GitHub 자동 동기화 (`gjc-skills`)
+- 에이전트 스킬 컬렉션 및 지침은 GitHub 전용 저장소(`https://github.com/lsi9923/gjc-skills`)로 상시 관리·백업된다.
+- 사용자가 "스킬 깃에 올려", "스킬 백업해", "깃 동기화해"라고 요청하거나 스킬 개선 완료 시 아래 명령을 실행하여 원클릭 동기화한다:
+  ```bash
+  python C:/Users/imda0/.gjc/agent/skills/sync_skills_to_git.py
+  ```
