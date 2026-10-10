@@ -1,7 +1,9 @@
 ---
 name: naver-seo-sudong-skill
-description: 네이버 스마트스토어 상위노출 최적화 실시간 상품등록 전문 스킬. "네이버 등록해줘", "네이버 등록", "네이버 상품등록", "이 URL", "상품등록" 등의 요청 시 더미파일(모의 JSON/복붙폼) 생성을 일절 배제하고, Orca Computer Use(`orca computer`)로 사용자의 활성 브라우저(1688/타오바오 소싱 페이지)를 직접 읽어 실측 스펙을 추출한 뒤, 스마트스토어 센터(sell.smartstore.naver.com) 화면을 직접 제어하여 카테고리 1.0·25~30자 상품명·10개 태그·고시정보·옵션을 직접 자동 입력한다.
+description: Legacy reference for standalone Naver SEO analysis only. Do not activate this skill for SmartStore registration requests; use the unified naver-coupang-register workflow. Consult only when the user explicitly requests this legacy skill or isolated SEO analysis.
 ---
+
+> Archived registration path: for all actual Naver/Coupang product registration, follow `../naver-coupang-register/SKILL.md`. This file is a non-executable reference; do not use its standalone form flow or conflicting defaults.
 
 # 네이버 스마트스토어 상위노출 실전 컴퓨터 유즈(Computer Use) 등록 프로토콜
 

@@ -18,15 +18,21 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
 ## 3. 네이버 스마트스토어·쿠팡 윙 상품 등록 및 구매대행 정리 (`naver-coupang-register` 외)
 사용자가 "네이버 쿠팡 등록해", "네이버 등록해줘", "쿠팡 등록해줘", "스마트스토어 등록", "윙 등록", "완료된폴더 N번 등록", "상품명 텀스", "이호 방식 상품명", "구매대행 정리/등록" 등을 지시하면 더미 JSON이나 단순 복붙용 텍스트만 던지고 끝내지 않고, 아래 등록 스킬 체계를 즉시 로드하여 실행한다:
 - **통합 실전 등록 스킬 (`naver-coupang-register`)**: `C:/Users/imda0/.gjc/agent/skills/naver-coupang-register/SKILL.md`
-  - 상세페이지 메이커 완료폴더(`C:\Users\imda0\Downloads\완료된폴더\<N>`) 기반 `prepare_product.py` → 네이버 F12(`naver_f12_capture.js` / `naver_search_extract.js` / `maker_helper_extract.js`) → 카테고리 말단 확정(`naver_category_pick.py`) → 이호 5분류 상품명·태그 조립(`naver_title_builder.py`) → 쿠팡 노출상품명·검색어·카테고리(`coupang_helper.py` / `coupang_category_pick.py`) → 플랜 병합 및 SEO 감사(`apply_to_plan.py --run-audit` / `seo_audit.py`) → 최종 확인표 생성(`build_confirm_table.py`) → 판매자센터/윙 등록 화면 입력. (최종 `저장하기`/`판매요청` 클릭은 반드시 사용자 최종 확인 후 실행)
-- **네이버 수동등록·구매대행 고시 스킬 (`naver-seo-sudong-skill`, `naver-shopping-listing`, `naver-rank-probe`)**:
+  - 상세페이지 메이커 완료폴더(`C:\Users\imda0\Downloads\완료된폴더\<N>`) 기반 `prepare_product.py` → 네이버 F12(`naver_f12_capture.js` / `naver_search_extract.js` / `maker_helper_extract.js`) → 카테고리 말단 확정(`naver_category_pick.py`) → 이호 5분류 상품명·태그 조립(`naver_title_builder.py`) → 쿠팡 노출상품명·검색어·카테고리(`coupang_helper.py` / `coupang_category_pick.py`) → 플랜 병합 및 SEO 감사(`apply_to_plan.py --run-audit` / `seo_audit.py`) → 최종 확인표 생성(`build_confirm_table.py`) → 판매자센터/윙 등록 화면 입력. (최종 Naver `저장하기`/Wing 화면상 제출 버튼—현재 `상품등록`—은 반드시 사용자 최종 확인 후 실행)
+- **네이버 레거시·참고 스킬 (통합 등록에서 독립 실행하지 않음)**:
   - `C:/Users/imda0/.gjc/agent/skills/naver-seo-sudong-skill/SKILL.md`
   - `C:/Users/imda0/.gjc/agent/skills/naver-shopping-listing/SKILL.md`
   - `C:/Users/imda0/.gjc/agent/skills/naver-rank-probe/SKILL.md`
-- **쿠팡 윙 수동등록·구매대행 설정 스킬 (`coupang-sudong-skill`)**:
+- **쿠팡 레거시·참고 스킬 (통합 등록에서 독립 실행하지 않음)**:
   - `C:/Users/imda0/.gjc/agent/skills/coupang-sudong-skill/SKILL.md`
 - **Argo Vault 자동 기록 (`argo-vault-sync`)**:
   - `C:\Users\imda0\.argo\vault`의 `끄쫀꾸` 프로젝트 핸드오버 연동)
+
+### 통합 등록 실행 규칙
+- 네이버·쿠팡을 함께 또는 각각 등록할 때 `naver-coupang-register`가 유일한 실행 절차다. `naver-seo-sudong-skill`과 `coupang-sudong-skill`은 이 절차와 충돌하지 않는 참고자료로만 읽고 독립 등록 흐름으로 실행하지 않는다.
+- 항상 기존 상품·원본 이미지·사용자가 이미 제공한 작업법을 먼저 확인하고, 근거 수집부터 실제 판매자 화면 입력·최종 승인·실제 제출·공개 판매상태 확인·Argo 기록까지 완료한다. 임시저장이나 확인표 작성만으로 종료하지 않는다.
+- 쿠팡은 근거 출처를 넓혀 고유 검색어 20개를 조사한다. Wing 검색필터의 `AI로 검색필터 채우기`를 실행하고 각 값이 원상품 근거와 맞는지 확인한다. 검색어가 20개 미만이면 `TAG_COUNT_UNDER_TARGET` BLOCK을 해결하기 전 제출하지 않는다.
+- 쿠팡 카테고리를 고르기 전 전체 공식 Wing 분류표/API를 확보하고 출처·버전·날짜·행 수를 기록해 전체 후보를 비교한 뒤 live picker에서 말단을 확인한다.
 
 ## 4. 키프리스(KIPRIS) 상표권 공식 직접 검색 절대 준수 (네이버 검색 절대 금지)
 - 해외구매대행 및 사입 소싱, 스마트스토어·쿠팡 상품 등록 시 상표권 검증은 **포털(네이버/다음/구글 등) 검색으로 절대 때우지 않는다**.

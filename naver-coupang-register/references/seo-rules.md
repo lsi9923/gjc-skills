@@ -28,7 +28,9 @@
 ## 쿠팡
 
 - 노출상품명: 공식 권장 `[브랜드]+[제품명]`, 최대 100자. 브랜드 제거 규칙 때문에 브랜드 칸은 `브랜드 없음/자체제작` 처리하고 상품명은 제품명 중심. `scripts/coupang_helper.py` 가 옵션값(색상·수량)·브랜드를 제거한 `exposureName` 을 만든다(색상은 쿠팡 표준명 정규화). 핵심 소구점 + 메인 키워드 + 용도/대상, 5~8단어. 60~90자로 억지로 늘리지 않는다 — 근거 있는 단어만. (하드코딩 F자패턴·태그풀은 이식하지 않음)
-- 검색어: 최대 20개, 개당 20자, 허용 특수문자 `!@#$%^&*-+;:'.`. `coupang_helper.py --keyword-json <title_build.json>` 이 네이버 F12 판정 통과 키워드(완성형/조합형/연결형/교집합)와 태그 후보에서만 검색어 슬롯을 채운다. **20개를 근거로 못 채우면 미만으로 둔다(지어내기 금지).** 추가 소스: Wing 등록화면 추천 검색어, Wing 인기검색어 도구(`coupang-trends/popularity-search`), 쿠팡 검색창 자동완성 중 상품과 맞는 것 — 화면에서 읽은 단어만 `--sources-json`(`wingRecommended>wingPopular>coupangAutocomplete>naverF12` 우선순위)으로 넘겨 소스별로 귀속한다(같은 단어는 높은 소스 1회, `searchTermsBySource`·`inName`·`exposureIssues` 로 요약). 상품과 무관한 키워드·타브랜드로 채우지 않는다.
+- 검색어: 목표·등록 전 완료 기준은 **고유 검색어 20개**이며, 항목당 20자 이내, 허용 특수문자는 `!@#$%^&*-+;:'.`. `coupang_helper.py --sources-json <sources.json>`의 관측된 Wing/Coupang 검색어가 최종 검색어의 주 근거다. Wing 추천·인기검색어 도구(`coupang-trends/popularity-search`), 쿠팡 자동완성·관련검색어를 모두 조사해 1~2개에서 멈추지 않는다. Naver F12와 title_build는 검색 쿼리 seed로 사용하고, Naver에서만 보인 단어는 Coupang-native 표면에서 재확인되기 전에는 최종 쿠팡 검색어로 채택하지 않는다.
+- 검색어는 상품의 실제 용도·기능·규격과 맞는지 한 항목씩 확인한다. 타브랜드, 홍보어, 중복, 무관어와 상품에 없는 재질·기능·규격은 제외한다. `--sources-json` 우선순위는 `wingRecommended>wingPopular>coupangAutocomplete>coupangRelatedQueries>naverF12>keywords>keywordJson`이다. 원상품 사실과 동일 용도의 상품명은 query seed로만 쓰고, 실제 검색표면에서 관측되지 않은 조합은 최종 검색어로 채택하지 않는다. 검색 쿼리·페이지 경로와 term을 별도 근거 기록으로 남기고 `searchTermsBySource`·`inName`·`exposureIssues`를 확인한다.
+- 조사 후에도 20개보다 적으면 근거 없는 표현으로 채우지 않는다. `seo_audit.py`의 `TAG_COUNT_UNDER_TARGET` BLOCK을 해결할 때까지 부족 수와 확인한 출처를 기록하고 추가 근거를 계속 조사한다.
 - 카테고리: Wing 카테고리 검색/추천에서 말단 선택. 쿠팡에서 같은 상품 상위 판매자의 카테고리 경로와 대조. 화면에서 읽은 후보만 `coupang_category_pick.py --candidates-json` 으로 점수화(reasons 근거)하고, 후보가 없으면 경로를 지어내지 않는다.
 - 검색필터(속성)·구매옵션: 카테고리가 요구하는 필수 구매옵션(수량, 색상, 용량 등)은 실제 값으로. 색상은 쿠팡 표준명(화이트/블랙/그레이). `coupang_category_pick.py --attributes-json`(화면 필터 스펙)으로 색상=표준명 정규화·숫자형=숫자만·enum 범위 밖/근거 없음 비움·품절 옵션(`droppedOptions`) 제외를 판정한다.
 - 고시정보: 카테고리가 지정한 품목군 항목명 그대로. 원상품 근거값 우선, 없는 항목만 `상세페이지 참조`.

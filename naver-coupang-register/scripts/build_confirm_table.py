@@ -181,13 +181,29 @@ def final_table_md(plan, market, market_label, coupang_build=None):
     elif opt_text:
         option_desc = "옵션 텍스트 있음 — 사용자 선택 확인 필요"
     else:
-        option_desc = "단일상품(옵션 없음, 재고 999 권장)"
+        stock = m.get("stockQuantity")
+        if stock is None:
+            stock = src.get("stockQuantity")
+        option_desc = f"단일상품(재고 {_val(stock)})" if stock is not None else "단일상품(재고 미확정)"
 
-    # 태그/검색어
+    # 태그/검색어: 쿠팡 helper 출처를 확인표에 그대로 드러낸다.
     tags = m.get("tags") or []
-    if market == "coupang" and coupang_build and not tags:
-        st = coupang_build.get("searchTerms") or []
-        tags = [t.get("term") if isinstance(t, dict) else t for t in st]
+    search_term_count = len(tags)
+    tag_display = _val(tags)
+    if market == "coupang":
+        sourced_terms = (coupang_build or {}).get("searchTerms") or []
+        if sourced_terms:
+            tags = [t.get("term") if isinstance(t, dict) else t for t in sourced_terms]
+            search_term_count = len(tags)
+            tag_display = ", ".join(
+                f"{_md_escape(t.get('term'))} [{_md_escape(t.get('source'))}]"
+                if isinstance(t, dict) and t.get("source")
+                else _md_escape(t.get("term") if isinstance(t, dict) else t)
+                for t in sourced_terms
+            )
+        else:
+            search_term_count = len(tags)
+            tag_display = _val(tags)
 
     rows = [
         ("카테고리", _val(m.get("categoryPath"))),
@@ -196,6 +212,11 @@ def final_table_md(plan, market, market_label, coupang_build=None):
     ]
     if market == "coupang":
         rows.append(("정상가", _num(original)))
+    if market == "naver" and m.get("existingItemId"):
+        rows.append(("기존 등록 상태 / 상품번호",
+                     f"{_val(m.get('existingStatus'))} / {_val(m.get('existingItemId'))} / {_val(m.get('registrationAction'))}"))
+    elif market == "coupang" and m.get("registrationState"):
+        rows.append(("현재 등록 상태", _val(m.get("registrationState"))))
     rows += [
         ("옵션·재고", _md_escape(option_desc)),
         ("대표/추가 이미지 수", f"대표 {rep} / 추가 {add}" if thumbs else UNSET),
@@ -208,8 +229,34 @@ def final_table_md(plan, market, market_label, coupang_build=None):
     if market == "naver":
         rows.append(("배송·반품비", "택배 유료 3,500원 / 반품 3,500원·교환 7,000원(등록 화면 확인)"))
     else:
-        rows.append(("배송·반품비", "쿠팡 배송정책(무료배송이면 가격에 배송비 포함) 확인"))
-    rows.append(("태그/검색어", _val(tags)))
+        method = _val(m.get("deliveryMethod"))
+        charge_type = _val(m.get("shippingChargeType"))
+        fee = _num(m.get("shippingFee"))
+        courier = _val(m.get("courier"))
+        return_courier = _val(m.get("returnCourier"))
+        initial = _num(m.get("initialReturnFee"))
+        return_fee = _num(m.get("returnFee"))
+        exchange = _num(m.get("exchangeFee"))
+        days = _val(m.get("outboundDays"))
+        jeju = _num(m.get("jejuAdditionalFee"))
+        remote_island = _num(m.get("remoteIslandAdditionalFee"))
+        address_status = _val(m.get("addressStatus"))
+        rows.append((
+            "배송·반품비",
+            f"{method} / {courier} / {charge_type} {fee} / 출고 {days}일 / "
+            f"반품 택배사 {return_courier}·초도 {initial}·편도 {return_fee}·교환 {exchange} / "
+            f"제주 추가 {jeju}·도서산간 추가 {remote_island} / {address_status}"
+        ))
+    if market == "coupang":
+        rows.append(("검색어 개수", f"{search_term_count}/20"))
+        filled_attributes = ((m.get("attributes") or {}).get("filled") or [])
+        applied_filter_values = "; ".join(
+            f"{_md_escape(a.get('name'))}={_md_escape(a.get('value'))}"
+            for a in filled_attributes
+            if a.get("name") and a.get("value") is not None
+        )
+        rows.append(("검색필터 적용값", applied_filter_values or UNSET))
+    rows.append(("태그/검색어", tag_display))
 
     lines = [f"#### (B) 최종 확인표 — {market_label}", "",
              "| 항목 | 값 |", "|---|---|"]
@@ -266,7 +313,7 @@ def build(plan, title_build=None, coupang_build=None, markets=None):
            f"- 생성 대상 폴더: {_val(plan.get('productFolder'))}",
            f"- 작업 폴더: {_val(plan.get('workDir'))}",
            "- 값이 비면 '미확정'으로 표기했고, 없는 값을 지어내지 않았습니다.",
-           "- `저장하기`/`판매요청` 은 사용자 최종 확인 후에만.", ""]
+           "- Naver `저장하기`/Coupang `상품등록` 은 사용자 최종 확인 후에만.", ""]
 
     # blockers/needsUser 알림
     blockers = plan.get("blockers") or []
@@ -310,7 +357,8 @@ def selftest():
                   "tags": ["무선청소기", "핸디청소기"], "salePrice": 39800,
                   "keywordJudgements": []},
         "coupang": {"categoryPath": "청소기", "productName": "무선청소기 핸디 차량용",
-                    "tags": [], "salePrice": 39800, "originalPrice": 59000},
+                    "tags": [], "salePrice": 39800, "originalPrice": 59000,
+                    "attributes": {"filled": [{"name": "색상", "value": "화이트"}]}},
         "seoAudit": {
             "naver": {"ok": True, "block": 0, "warn": 1, "violations": [
                 {"field": "naver.productName", "severity": "WARN", "rule": "DUPLICATE_TOKEN",
@@ -323,14 +371,16 @@ def selftest():
         {"keyword": "무선청소기", "type": "완성형", "basis": "terms 통째"},
         {"keyword": "차량용청소기", "type": "조합형", "basis": "차량용/청소기 분해"},
         {"keyword": "무선청소기추천", "type": "미적용", "basis": "'추천' 소멸"}]}
-    cb = {"exposureName": "무선청소기 핸디 차량용",
-          "searchTerms": [{"term": "무선청소기"}, {"term": "핸디청소기"}]}
+    cb = {"exposureName": "무선청소기 핸디 차량용", "searchTermCount": 20,
+          "searchTerms": [{"term": f"검색어{i}", "source": "쿠팡 자동완성"} for i in range(20)]}
     md = build(plan_full, title_build=tb, coupang_build=cb)
     assert "# 마켓별 최종 확인표" in md
     assert "네이버 스마트스토어" in md and "쿠팡 윙" in md
     assert "무선청소기 핸디 차량용 청소기" in md
     assert "39,800원" in md and "59,000원" in md  # 쿠팡 정상가
     assert "완성형" in md and "미적용" in md
+    assert "20/20" in md
+    assert "쿠팡 자동완성" in md and "화이트" in md
     # 네이버 seo_audit WARN 이 표시
     assert "DUPLICATE_TOKEN" in md
     # 대표/추가 이미지 수
@@ -348,8 +398,8 @@ def selftest():
         "naver": {"categoryPath": "", "productName": "", "tags": [], "salePrice": None,
                   "keywordJudgements": []},
         "coupang": {"productName": "", "tags": [], "salePrice": None, "originalPrice": None},
-        "seoAudit": {"coupang": {"ok": True, "block": 0, "warn": 1, "violations": [
-            {"field": "coupang.tags", "severity": "WARN", "rule": "TAG_SLOTS_EMPTY",
+        "seoAudit": {"coupang": {"ok": False, "block": 1, "warn": 0, "violations": [
+            {"field": "coupang.tags", "severity": "BLOCK", "rule": "TAG_COUNT_UNDER_TARGET",
              "message": "검색어 0/20개", "evidence": ""}]}},
     }
     md2 = build(plan_empty)

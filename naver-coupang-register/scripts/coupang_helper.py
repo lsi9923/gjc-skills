@@ -5,17 +5,13 @@ skill_audit 권고 반영:
 - 구버전 coupang_title_composer / coupang_tags_generator 의 '하드코딩 태그풀·카테고리 프리셋·
   F자패턴 전면배치'는 이식 금지(근거 없는 채우기).
 - 살릴 개념만 이식: (1) 옵션값(색상·수량) 제거, (2) 색상 쿠팡 표준명 정규화,
-  (3) 근거 있는 키워드로만 검색어 슬롯 채우기(못 채우면 20개 미만 허용).
+  (3) 근거 있는 키워드로만 검색어 후보 구성. 이 도구는 후보 조립기이며, 20개 미만이면
+  후속 SEO audit가 BLOCK 하므로 추가 근거를 수집해야 한다.
 
 입력 = 근거 있는 키워드 소스들. 아무 근거 없이 슬롯을 지어내지 않는다.
   --name "정제된 제품명"             (필수, prepare_product.cleanedName 사용 권장)
-  --keywords "a,b,c"                네이버 F12 판정 통과 키워드(완성형/조합형/연결형/교집합) + 태그 후보
-  --keyword-json <naver_title_builder 출력.json>  judgeTable/tagCandidates 에서 근거 키워드 흡수
-  --sources-json <sources.json>    검색어 소스별 근거를 우선순위로 넘김(신규, 하위호환):
-      { "wingRecommended": ["..."], "wingPopular": ["..."],
-        "coupangAutocomplete": ["..."], "naverF12": ["..."] }
-    우선순위: 윙 추천 검색어 > 윙 인기검색어 도구 > 쿠팡 자동완성 > 네이버 F12 근거.
-    출력 각 검색어에 source 표시. 같은 단어가 여러 소스에 있으면 더 높은 소스로 귀속.
+  --keywords / --keyword-json    Source-backed candidates (record exact evidence separately)
+  --sources-json <sources.json>    Observed terms: wingRecommended, wingPopular, coupangAutocomplete, coupangRelatedQueries, naverF12; seeds alone are not final.
   --plan <registration_plan.json>  brand.removedFromMarketing 흡수
   --brand-removed "더이안"
 출력 = { exposureName, exposureIssues[], searchTerms[{term,source,inName}], excluded[], notes[] } (JSON)
@@ -51,7 +47,7 @@ EXPOSURE_BANNED = PROMOTIONAL | {"강추", "대박", "핫딜", "역대급", "최
 SOURCE_PRIORITY = [
     ("wingRecommended", "윙 추천 검색어"),
     ("wingPopular", "윙 인기검색어 도구"),
-    ("coupangAutocomplete", "쿠팡 자동완성"),
+    ("coupangAutocomplete", "쿠팡 자동완성"), ("coupangRelatedQueries", "쿠팡 관련검색어"),
     ("naverF12", "네이버 F12 근거"),
     ("keywords", "직접 입력(--keywords)"),
     ("keywordJson", "title_builder 근거"),
@@ -109,7 +105,7 @@ def build_search_terms(sourced, name, brand_removed, limit=20):
     """근거 있는 키워드로 검색어 슬롯 채우기(소스 우선순위·출처 표시).
 
     sourced = [(keyword, source_key), ...]  이미 우선순위 순으로 정렬돼 들어온다.
-    근거 없으면 20개 미만 허용(지어내지 않음). 같은 단어는 먼저(높은 소스) 것만.
+    근거가 부족하면 후보를 20개 미만 반환하며, seo_audit.py가 제출을 BLOCK한다. 중복은 높은 소스만 남긴다.
     """
     brand_removed_l = [b.lower() for b in brand_removed if b]
     name_c = re.sub(r"\s+", "", nfc(name)).lower()
@@ -186,13 +182,13 @@ def run(name, sourced, brand_removed):
     exposure = exposure_full[:100]  # 화면 입력용은 100자로 자름(이슈는 위에서 이미 기록)
     terms, excluded = build_search_terms(sourced, exposure, brand_removed)
     notes = [
-        "검색어는 근거 있는 키워드로만 채운다. 20개를 못 채우면 미만으로 둔다(지어내기 금지).",
-        "소스 우선순위: 윙 추천 > 윙 인기검색어 > 쿠팡 자동완성 > 네이버 F12. 각 검색어에 출처 표시.",
+        "검색어는 근거 있는 고유 키워드 20개가 제출 전 완료 기준이다. 부족하면 출처 조사를 계속하고 지어내지 않는다.",
+        "소스 우선순위: 윙 추천 > 윙 인기검색어 > 쿠팡 자동완성 > 쿠팡 관련검색어 > 네이버 F12 > 직접 입력 > title_builder. 각 검색어에 출처 표시.",
         "F자패턴·하드코딩 태그풀은 이식하지 않음(skill_audit 권고). 색상은 쿠팡 표준명 사용.",
         "노출상품명은 옵션값(색상·수량) 제외. 브랜드칸은 '브랜드 없음' 처리(상품명은 제품명 중심).",
     ]
     if len(terms) < 20:
-        notes.append(f"검색어 {len(terms)}/20 - 근거 있는 후보가 더 있으면 F12/자동완성/Wing 인기검색어로 보강.")
+        notes.append(f"검색어 {len(terms)}/20 - 미완료 후보 상태이며 seo_audit.py가 제출을 BLOCK함. 추가 근거 수집 필요.")
     # 소스별 채택 수 요약
     by_source = {}
     for t in terms:
@@ -221,12 +217,12 @@ def selftest():
     # 소스 우선순위: 같은 단어면 높은 소스로 귀속, 출처 표시
     s2 = merge_sources({"wingRecommended": ["신발정리대"],
                         "coupangAutocomplete": ["신발정리대", "현관정리대"],
-                        "naverF12": ["신발장정리대"]})
+                        "coupangRelatedQueries": ["현관정리대", "신발장정리대"], "naverF12": ["실내화정리대"]})
     r2 = run("신발정리대 3단", s2, [])
     by = {t["term"]: t["source"] for t in r2["searchTerms"]}
     assert by["신발정리대"] == "윙 추천 검색어", by
     assert by["현관정리대"] == "쿠팡 자동완성", by
-    assert by["신발장정리대"] == "네이버 F12 근거", by
+    assert by["신발장정리대"] == "쿠팡 관련검색어" and by["실내화정리대"] == "네이버 F12 근거", by
 
     print(json.dumps({"selftest": "PASS", "exposureName": r["exposureName"],
                       "terms": [t["term"] for t in r["searchTerms"]],
@@ -256,7 +252,7 @@ def main():
     if a.sources_json and Path(a.sources_json).exists():
         try:
             sj = json.loads(Path(a.sources_json).read_text(encoding="utf-8"))
-            for k in ("wingRecommended", "wingPopular", "coupangAutocomplete", "naverF12"):
+            for k in ("wingRecommended", "wingPopular", "coupangAutocomplete", "coupangRelatedQueries", "naverF12"):
                 if sj.get(k):
                     source_lists[k] = [nfc(x) for x in sj[k] if nfc(x)]
         except Exception:

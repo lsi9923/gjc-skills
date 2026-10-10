@@ -9,9 +9,16 @@ autoInject:
 
 # 네이버·쿠팡 상품 등록
 
-더미 JSON이나 복붙용 텍스트만 주고 끝내지 않는다. 실제 등록 화면에 직접 입력한다. 단, 마지막 `저장하기`/`판매요청` 클릭은 사용자 최종 확인 후에만 한다.
+더미 JSON이나 복붙용 텍스트만 주고 끝내지 않는다. 실제 등록 화면에 직접 입력한다. Naver는 `저장하기`, Coupang은 현재 화면의 최종 제출 버튼(확인된 라벨은 `상품등록`)을 사용자 최종 확인 후에만 누른다.
 
 `<skill>` = 이 SKILL.md 가 있는 폴더. 스크립트는 bash(PowerShell)에서 `python` 으로 실행한다(표준 라이브러리만 사용).
+
+## 실행 계약: 준비부터 판매 검증까지
+- 이 통합 스킬을 네이버·쿠팡 등록의 단일 실행 진입점으로 쓴다. 이전의 Naver/Coupang 단일 마켓 스킬은 근거 참고용이며, 서로 다른 등록 절차를 따로 실행하지 않는다.
+- 사용자가 `등록`을 요청하면 기존 상품 중복 확인, 원상품·가격·옵션·고시·이미지 조사, SEO·카테고리 근거 수집, 판매자 화면 입력, 최종 확인표, 명시적 승인 뒤 실제 제출, 등록 ID·재고·판매 상태·고객용 페이지 확인, Argo 기록까지 끝낸다. 계획서나 임시저장만으로 완료 처리하지 않는다.
+- 이전 대화, Argo, Aside 세션과 원본 폴더를 먼저 찾아 이미 제공된 이미지·입력법을 재사용한다. 옵션·비용·배송값은 출처를 조사해 구체적인 최선안을 제시한다. 사용자가 단일상품이라고 하면 근거와 명시적 선택 전까지 옵션을 만들지 않는다.
+- 네이버 기존 일치 상품이 판매중·전시중이면 수정·중복 등록하지 않는다. 여러 상품 요청은 한 번에 하나씩 등록하고 실제 결과를 확인한다.
+- 제출 버튼은 사용자가 최종 확인표를 보고 승인한 뒤에만 누른다. 로그인·인증·캡차는 사용자가 처리한다. 개인정보·이미지 URL·비밀정보는 Argo나 공개 기록에 남기지 않는다.
 
 ## 0. 입력 확정
 - 대상: "완료된폴더 N번"/폴더 경로/상품 URL. URL만 받으면 `C:\Users\imda0\Downloads\완료된폴더\*\source.json` 의 url 상품번호로 폴더를 찾는다. 못 찾으면 상세페이지 메이커(`<skill>/config/seller_profile.json` sourceFolders.makerProgram)로 먼저 만들어야 한다고 알린다.
@@ -61,22 +68,27 @@ python "<skill>\scripts\prepare_product.py" "<완료폴더\N>" --out "C:\tmp\reg
    - ⑥ 최종 상품명 검증(강의 2-5): 완성 상품명 전체로 다시 검색해 `naver_f12_capture.js` 를 `{ target: 상품명, title: 상품명 }` 으로 실행 → `ev.titleCheck` 의 `누락` 단어는 빼거나 교체, `intersection` 단어는 교집합 처리로 기록. 카테고리 relevance 가 여전히 1.0 근처인지 확인.
    - `blockedOrCaptcha`(또는 `httpBlocked`) 면 사용자에게 캡차/로그인을 요청하고 우회하지 않는다. `schemaNote` 가 "terms 키를 찾지 못함" 이면 `networkRequests` 목록과 함께 `memory/sites/search.shopping.naver.com.md` 에 기록하고, 그 상품은 terms 판정을 "판정불가"로 표시해 최종 확인표에 알린다.
    - 결과는 모두 plan 의 `naver.categoryEvidence`, `naver.f12Evidence`(수집시각·URL·JSON 경로), `naver.keywordJudgements`(title_build.judgeTable)에 저장.
-3. 네이버: 카테고리 경로, 상품명(완성형 0번, 조합형 왼→오·거리 최소, 25~30자 권장), 태그 10개 확정. plan 의 `naver.productName`/`naver.tags`/`naver.keywordJudgements`/`naver.categoryPath` 는 손으로 편집하지 말고 §6 의 `apply_to_plan.py` 로 채운다(title_build/naver_category 산출물에서 병합). 상품명 후보가 2개면 `--title-index` 로 고르고, 최종 확인표에 판정표(키워드/판정/근거 JSON 경로)를 함께 보여준다.
+3. 네이버: 카테고리 경로, 상품명(완성형 0번, 조합형 왼→오·거리 최소, 25~30자 권장), 태그 10개 확정. plan 의 `naver.productName`/`naver.tags`/`naver.keywordJudgements`/`naver.categoryPath` 는 손으로 편집하지 말고 §2-6 의 `apply_to_plan.py` 로 채운다(title_build/naver_category 산출물에서 병합). 상품명 후보가 2개면 `--title-index` 로 고르고, 최종 확인표에 판정표(키워드/판정/근거 JSON 경로)를 함께 보여준다.
 4. 쿠팡: 노출상품명(옵션값 제외, ≤100자) + 검색어 최대 20개를 근거 있는 키워드로 보강:
    ```
-   python "<skill>\scripts\coupang_helper.py" --plan "<workDir>\registration_plan.json" --keyword-json "<workDir>\title_build.json" --out "<workDir>\coupang_build.json"
+   python "<skill>\scripts\coupang_helper.py" --plan "<workDir>\registration_plan.json" --sources-json "<workDir>\sources.json" --out "<workDir>\coupang_build.json"
    ```
-   `exposureName`(옵션값·브랜드 제거된 제품명), `searchTerms`(F12 근거 통과 키워드 + 태그 후보에서만 채움 — 20개 미달이면 미달로 둠, 지어내기 금지), `excluded` 는 §6 의 `apply_to_plan.py` 가 plan 의 `coupang.productName`/`coupang.tags`/`coupang.categoryPath`/`coupang.attributes` 에 병합한다(손으로 편집하지 않는다). 색상은 쿠팡 표준명(화이트/블랙/그레이).
-   - 검색어 소스 보강(선택): Wing 등록화면 `추천 검색어`·`인기검색어` 도구·쿠팡 자동완성에서 **화면에 실제로 뜬 단어만** 읽어 `sources.json`(`{"wingRecommended":[...],"wingPopular":[...],"coupangAutocomplete":[...],"naverF12":[...]}`)으로 만들고 `--sources-json` 으로 넘기면 소스 우선순위로 검색어를 귀속한다(같은 단어는 높은 소스 1회). 화면에 없으면 지어내지 않는다.
+   `exposureName`(옵션값·브랜드 제거된 제품명), `searchTerms`(출처가 확인된 고유 후보어), `excluded` 는 §2-6 의 `apply_to_plan.py` 가 plan 의 `coupang.productName`/`coupang.tags`/`coupang.categoryPath`/`coupang.attributes` 에 병합한다(손으로 편집하지 않는다). 색상은 쿠팡 표준명(화이트/블랙/그레이).
+   - 검색어 소스 보강: Wing 등록화면 `추천 검색어`·`인기검색어` 도구·쿠팡 자동완성·관련검색어·네이버 F12에서 **화면/API 응답에 실제로 나타난 단어만** 읽어 `sources.json`(`{"wingRecommended":[...],"wingPopular":[...],"coupangAutocomplete":[...],"coupangRelatedQueries":[...],"naverF12":[...]}`)으로 만들고 `--sources-json`으로 넘긴다. 상품 원문과 유사상품 제목은 쿼리 seed로만 쓰고, 반환된 관련어를 최종 입력한다. 소스 우선순위로 중복을 제거하고, 화면에 없으면 지어내지 않는다.
+   - Naver F12, 원상품 사실, 유사상품 제목은 검색 쿼리의 seed이지 Coupang 검색수요의 증거가 아니다. Naver 단어는 뜻과 상품 사실이 일치하고 Coupang-native 검색표면에서 재확인된 경우에만 `naverF12`로 전달한다. `--keyword-json`은 후보 조사에만 쓰고 Coupang 최종 검색어를 자동 채우는 근거로 바로 사용하지 않는다.
      ```
      python "<skill>\scripts\coupang_helper.py" --name "<노출상품명>" --sources-json "<workDir>\sources.json" --out "<workDir>\coupang_build.json"
      ```
+   - `sources.json`은 `wingRecommended`, `wingPopular`, `coupangAutocomplete`, `coupangRelatedQueries`, `naverF12`의 실제 관측어 배열을 지원한다. 원상품 사실과 동일 용도의 상품명은 query seed로만 쓰고, 검색창·추천·관련어에 실제로 나타난 표현만 최종 후보어로 넘긴다. 원본 쿼리·경로와 term별 근거는 별도 파일로 보존한다.
+   - 사용자 최신 지시상 검색어 완료 기준은 **20개의 고유 검색어**다. 1~2개에서 중단하지 말고 Wing 추천·인기검색어, Coupang 자동완성과 관련검색어를 먼저 조사한다. Naver F12·원상품 사실·유사상품 제목은 query seed로만 쓰며, 실제 Coupang-native 검색표면에서 확인한 뒤에만 최종 검색어로 채택한다. 검색어마다 출처를 남기고 타브랜드·홍보어·무관어·상품에 없는 기능이나 규격은 제외한다.
+   - 20개 미만이면 `seo_audit.py`의 `TAG_COUNT_UNDER_TARGET` BLOCK을 해결할 때까지 제출하지 않는다. 부족한 수와 조사한 출처를 기록하고 추가 근거를 계속 찾는다. 빈칸을 지어낸 단어로 채우지 않는다.
+   - 카테고리 후보를 만들기 전에 최신 공식 Wing 전체 분류표 또는 전체 카테고리 API를 확보한다. 출처·버전·조회일·행 수를 기록하고 상품 용도에 맞는 전체 말단 후보를 비교한 뒤 live picker에서 동일한 선택 가능 leaf를 확인한다. 단일 후보나 오래된 코드표만 보고 결정하지 않는다.
    - 카테고리 말단 확정: Wing 카테고리 검색/추천 화면에서 읽은 후보만 `candidates.json`(`{"candidates":[{"path":..,"code":..,"leaf":..,"topSeller":true|false}]}`)으로, 화면 필수옵션/필터 스펙은 `attributes.json`(`{"required":[{"name","type","unit","values":[]}]}`)으로 만들어 넣는다(경로를 지어내지 않는다). 상품 사실은 `product.json`(`{productName, naverCategoryPath, keywords, options, attributesEvidence}`).
      ```
      python "<skill>\scripts\coupang_category_pick.py" --product-json "<workDir>\product.json" --candidates-json "<workDir>\candidates.json" --attributes-json "<workDir>\attributes.json" --out "<workDir>\coupang_category.json"
      ```
      출력의 `categoryCandidates`(score·reasons), `attributes.filled/empty`, `droppedOptions`(품절·판매종료) 를 근거로 말단·필수옵션을 채운다. 후보가 없으면 `categoryCandidates=[]` — 임의 경로를 만들지 않고 화면에서 다시 읽는다.
-5. 가격: plan.pricing.suggested(원가가 있을 때) 또는 사용자가 준 판매가. 쿠팡은 무료배송이므로 배송비 포함 가격.
+5. 가격: plan.pricing.suggested(원가가 있을 때) 또는 사용자가 준 판매가. 배송 정책은 사용자 승인값과 현재 seller profile/live form을 조사해 정한다. 무료배송이면 배송비 포함 가격, 유료배송이면 승인된 배송비를 별도 반영한다. 이전 상품의 배송 설정을 새 상품에 임의 복사하지 않는다.
 6. 중간 산출물을 plan 에 병합하고 검사한다. 각 스크립트는 자기 out 파일에만 쓰므로, `apply_to_plan.py` 로 근거값을 `registration_plan.json` 에 한 번에 옮긴다(값이 없으면 건드리지 않음 — 발명 금지). `--run-audit` 는 병합 후 seo_audit 를 실행해 결과를 `plan.seoAudit` 에 기록하므로 `build_confirm_table.py` 가 그대로 읽는다.
 ```
 python "<skill>\scripts\apply_to_plan.py" --plan "<workDir>\registration_plan.json" --title-build "<workDir>\title_build.json" --naver-category "<workDir>\naver_category.json" --coupang "<workDir>\coupang_build.json" --coupang-category "<workDir>\coupang_category.json" --run-audit
@@ -99,6 +111,7 @@ BLOCK 이 0 이 될 때까지 고친다(고친 뒤 `apply_to_plan.py --run-audit
 - 네이버: `references/naver-smartstore.md` 순서대로. 판매자센터 로그인은 사용자가 직접.
 - 쿠팡: `references/coupang-wing.md` 순서대로. 윙 로그인은 사용자가 직접.
 - 둘 다면 네이버 → 쿠팡 순. 각 입력 후 스냅샷으로 값이 들어갔는지 확인하고, 기본값(원산지 국산, 배송 무료, 반품 0원 등)이 남아 있지 않은지 본다.
+- 쿠팡 검색필터 섹션에 `AI로 검색필터 채우기`가 보이면 클릭하고 완료 상태를 스냅샷으로 확인한다. 고정 시간으로 기다리지 말고 로딩 완료 또는 속성 버튼의 `선택하세요`→구체값 변경을 관찰한다. 채워진 각 값을 원상품 근거·카테고리 필수값과 대조해 틀리거나 근거 없는 값은 제거·수정한다. 버튼이 없으면 실행했다고 기록하지 않는다.
 - 버튼 ref 가 불안정하면 visual-browse 로 좌표 클릭 후 반드시 재확인.
 
 ## 4. 최종 확인 → 등록
@@ -120,17 +133,17 @@ python "<skill>\scripts\build_confirm_table.py" --plan "<workDir>\registration_p
 | 질유산균 | 조합형 | 질/유산균 분해 | 상품명(질 유산균 인접) |
 | 유산균추천 | 미적용 | '추천' 소멸 | 제외 |
 
-(B) 최종 확인표: 카테고리, 상품명(글자수), 판매가/정상가, 옵션·재고, 대표/추가 이미지 수, 상세 이미지 수, 브랜드/제조사/원산지, 고시 요약, 배송·반품비, 태그/검색어, SEO 검사 WARN(IHO_HEAD_COMPLETE/IHO_COMBO_ORDER 포함), 검색품질 체크 결과.
+(B) 최종 확인표: 카테고리, 상품명(글자수), 판매가/정상가, 옵션·재고, 대표/추가 이미지 수, 상세 이미지 수, 브랜드/제조사/원산지, 고시 요약, 배송·반품비, 쿠팡 검색어 20/20과 검색필터 자동채우기 후 적용값, SEO 검사 WARN/BLOCK(IHO_HEAD_COMPLETE/IHO_COMBO_ORDER 포함), 검색품질 체크 결과.
 
-사용자가 "등록"/"진행"이라고 하면 네이버 `저장하기`, 쿠팡 `판매요청`. "임시저장"이면 임시저장만. 사용자 확인 전에는 절대 클릭하지 않는다.
-등록 후 상품번호(네이버), 등록상품ID·노출상품ID(쿠팡)를 캡처해 plan 에 기록하고 보고한다.
+사용자가 "등록"/"진행"이라고 하면 네이버 `저장하기`, 쿠팡은 현재 화면의 최종 제출 버튼(확인된 라벨 `상품등록`)을 누른다. "임시저장"이면 해당 마켓의 화면상 임시저장 기능만 사용한다. 사용자 확인 전에는 절대 클릭하지 않는다.
+등록 후 상품번호(네이버), 등록상품ID·노출상품ID·옵션 ID(쿠팡)를 캡처해 plan 에 기록하고 보고한다. 제출 완료 알림만으로 완료 처리하지 않는다. Wing 상품목록과 확장 옵션행에서 승인상태·판매상태·실재고를 확인하고, 공개 상품페이지의 품절 여부와 장바구니·바로구매 상태로 실제 판매 가능성을 검증한다. 화면끼리 불일치하면 원인을 조사해 승인된 값과 맞춘 뒤 다시 검증한다.
 
 ## 5. Argo 자동 연결과 기록
 - 사용자가 별도로 말하지 않아도 등록 시작 전에 Argo `끄쫀꾸` 허브와 원본 상품·SEO·등록 기록을 읽는다.
 - 상품 폴더, 원상품 근거, SEO/F12 판정, 입력값, 사용자 승인 경계, 화면 검증, 등록 결과와 차단 사유를 작업 종료 시 Argo 핸드오버로 저장한다.
 - 네이버와 쿠팡은 각각 별도 기록을 남기고, 임시저장·검증완료·실제등록을 혼동하지 않는다.
 - 로그인정보, 인증번호, 비밀번호, 토큰, API 키, 쿠키는 Argo에 저장하지 않는다.
-- 실제 `저장하기`·`판매요청`은 기존처럼 최종 확인 후에만 실행한다.
+- 실제 Naver `저장하기`·Coupang의 최종 제출 버튼은 기존처럼 최종 확인 후에만 실행한다.
 
 ## 6. 기존 메모리 기록
 - 새로 알게 된 화면 동작은 `memory/sites/smartstore.naver.com.md` 또는 `memory/sites/wing.coupang.com.md` History 에 추가.
@@ -138,7 +151,7 @@ python "<skill>\scripts\build_confirm_table.py" --plan "<workDir>\registration_p
 
 ## 규칙
 - 브랜드/판매자명(예: 더이안)은 상품명·태그·홍보 문구에서 제거, 고시의 제조자·수입자·제조국은 사실대로 유지.
-- 메이커 상세페이지 이미지만 상세설명에 넣는다. 임의 SEO 카드 이미지를 만들어 넣지 않는다.
+- 상세 이미지·대표 이미지는 메이커 원본 또는 사용자가 제공했거나 정확히 일치하는 기존 활성 상품의 원본만 사용한다. 기존 listing 재사용 시 같은 상품인지 확인한다. 사용자가 이미 준 이미지와 입력법은 대화·Argo·Aside 기록에서 먼저 찾아 재사용하고, 경쟁사나 다른 형태의 상품 이미지는 쓰지 않는다. 임의 SEO 카드 이미지를 만들거나 추가하지 않는다.
 - 이호 기준을 실제로 적용한 부분과 추정한 부분을 구분해서 보고한다.
 - 근거 없는 인증·원산지·속성·수식어(추천/인기/신형 등) 금지. 가구매·리뷰조작·트래픽·판매상태 토글·캡차 우회 금지.
 - 쿠팡 해외구매대행은 해외 출고지·인보이스가 있어야 가능하다. 국내(인천) 출고 위탁상품은 일반배송으로 등록한다.

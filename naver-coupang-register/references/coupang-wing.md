@@ -35,10 +35,10 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 - **옵션 구분**: 단일상품이면 옵션 없음(단일). 필수 구매옵션이 요구되면 실제 값(예: 수량 `1개`). 실제 옵션이 있으면 옵션명·값 입력 → 옵션목록 생성.
   - 옵션 근거: `plan.source.optionRows` 중 사용자가 지정한 것만. `coupang_category.json` 의 `droppedOptions`(품절·판매종료)는 제외.
   - 색상은 **쿠팡 표준명**(흰색→화이트, 회색→그레이, 검정→블랙 — coupang_category 판정).
-- **판매가**: `plan.coupang.salePrice`(무료배송이므로 배송비 포함 가격).
+- **판매가**: `plan.coupang.salePrice`. 무료배송이면 배송비를 포함하고, 유료배송이면 승인된 배송비를 별도 반영한다.
 - **정상가(할인율기준가)**: `plan.coupang.originalPrice`. 없으면 판매가와 동일(→ '쿠팡가' 표시).
   - **(미검증)** 구버전의 "정상가를 판매가보다 20~30% 높게" 는 근거 없는 임의 인상 → 하지 않는다. profile.coupang 에는 참고용 `coupangOriginalPriceRatio 1.25` 만 있고, 실제 정상가는 근거 있을 때만.
-- **재고**: 옵션별 `999`(profile.coupang.stockPerOption). **인당 최대구매 0**(제한없음, profile.coupang.maxBuyPerPerson).
+- **재고**: `plan.coupang.stockQuantity` 또는 옵션별 승인값을 입력한다. `999` 같은 고정 기본값을 추측하지 않는다. 제출 뒤 상품목록의 확장 옵션행에서 실재고가 승인값과 일치하는지 확인한다. **인당 최대구매 0**(제한없음, profile.coupang.maxBuyPerPerson).
 - **과세**: `과세`(profile.coupang.taxType). **미성년자 구매 가능**(전체 이용가).
 - **바코드**: 없으면 `바코드 없음` 체크 + 사유 — 국내 위탁: "제조사 바코드 미제공 상품", 해외구매대행: "해외구매대행 상품으로 바코드가 없습니다".
 - **확인**: 옵션별 판매가·정상가·재고가 일괄 적용됐는지, 필수옵션 경고가 없는지 확인.
@@ -52,6 +52,7 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 ## [섹션 5] 상세설명
 - **입력값(세션 폴더 안 경로만)**: `plan.images.coupang.detailContents`(`section_01~` 순서). 섹션이 없을 때만 `detail_page.png` 시도.
 - **입력법**: `이미지 업로드` 방식으로 업로드 → 미리보기에서 순서·개수 확인.
+- 사용자가 이미 상세 이미지와 삽입법을 알려줬다면 대화·Argo·Aside 기록에서 먼저 복구한다. 현재 UI에 `HTML 작성`/`텍스트(HTML) 추가`가 있고 그 안내로 정확한 원본 이미지를 넣기로 한 경우에만 사용자가 준 방식을 그대로 적용한다. 에디터 안 저장은 상품 제출과 구분하고, 저장 뒤 실제 이미지 로드·크기·순서를 확인한다. URL이나 HTML을 추측하거나 경쟁사 이미지를 쓰지 않는다.
 - **함정**: `detail_page.png` 용량 오류(3MB 초과 등) 시 사용자에게 알림. 이호 자료·임의 SEO 카드 이미지 추가 금지.
 
 ## [섹션 6] 상품 주요정보
@@ -65,12 +66,18 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 ## [섹션 7] 검색필터(속성)
 - **입력값**: 화면에 뜬 필터 스펙을 `attributes.json` 으로 만들어 `coupang_category_pick.py --attributes-json` 판정 → `coupang_category.json` 의 `attributes.filled`(색상=쿠팡 표준명·숫자형=숫자만·enum 일치)만 선택. `attributes.empty` 는 **비운다**.
 - **원칙**: 원상품 근거가 있는 항목만. 무관한 속성을 남발하면 알고리즘 일치도 하락(구버전·현행 공통).
-- **확인**: 필수 속성이 채워졌는지, empty 로 둔 항목이 필수 경고를 내지 않는지 확인.
+- **자동채우기**: 카테고리·상품명·옵션/기본정보 입력 후 `AI로 검색필터 채우기` 버튼이 보이면 클릭한다(실제 라벨은 현재 화면 스냅샷에서 확인). 고정 시간으로 기다리지 말고 로딩 완료 또는 속성 버튼의 `선택하세요`→구체적인 enum 값 변경을 관찰한 뒤 스냅샷을 다시 찍는다. 자동값은 제안값으로만 취급한다.
+- **수정 및 확인**: 근거 없는 자동값은 비우고, 잘못된 값은 근거 있는 표준값으로 바꾼다. 자동으로 채워지지 않은 필수 속성은 실제 근거가 있을 때만 입력한다. 최종 적용값을 `plan.coupang.attributes` 및 사용자 확인표에 반영한다. 버튼이 없으면 자동채우기를 실행한 것처럼 기록하지 않는다.
+- 자동채움 결과가 `coupang_category.json`의 예상 속성과 다르면 live 스펙과 적용값으로 `attributes.json`을 갱신하고 `coupang_category_pick.py` 및 `apply_to_plan.py`를 다시 실행한다. plan 필드는 손으로 편집하지 않는다.
+- **확인**: 필수 속성이 채워졌는지, empty 로 둔 항목이 필수 경고를 내지 않는지, 화면에 보이는 각 적용값이 plan 및 원상품 근거와 같은지 확인한다.
 
 ## [섹션 8] 검색어
-- **입력값**: `coupang_build.json` 의 `searchTerms`(F12 근거 통과 키워드 + 태그 후보) = `plan.coupang.tags`. 하나씩 입력(Enter).
-- **소스 보강(선택)**: 화면의 `추천 검색어`·`인기검색어`(`popularity-search` 도구)·자동완성 중 **실제로 뜬 단어만** `sources.json` 으로 `coupang_helper.py --sources-json` 에 넘겨 소스 우선순위 귀속. 화면에 없으면 지어내지 않는다.
-- **함정**: **20개를 억지로 꽉 채우지 않는다**. 근거 없는 단어로 채우기 금지 — 20개 미달이면 미달로 둔다. (구버전 "정확히 20개 꽉 채움" 은 근거 있는 키워드가 충분할 때만.) 개당 20자·허용 특수문자만.
+- **출처 형식**: `sources.json`은 `wingRecommended`, `wingPopular`, `coupangAutocomplete`, `coupangRelatedQueries`, `naverF12`의 실제 관측어 배열을 받는다. 상품 원문과 동일 용도 상품명은 query seed로만 쓰고, 실제 검색표면에 표시된 표현만 최종 후보로 전달한다.
+- **근거 기록**: `<workDir>\search_terms_evidence.json`에 각 확정 term, 출처, 실제 query, `<workDir>` 기준 근거 파일·캡처 경로, 상품과 맞는 이유를 기록한다. 개인정보와 URL 토큰은 넣지 않는다.
+- **입력값**: `coupang_build.json` 의 `searchTerms` = `plan.coupang.tags`. 목표는 고유 검색어 **20개**다. 중복을 제거하고 하나씩 입력(Enter)한다.
+- **근거 수집 순서**: Wing 추천 검색어, Wing 인기검색어 도구, 쿠팡 자동완성, 네이버 F12의 유효 terms/intersection 및 연관어, 원상품·메이커 카피의 실제 특징, 동일 용도의 쿠팡 검색결과 제목을 살펴 후보를 넓힌다. 상품과 정확히 맞고 출처가 남는 후보만 채택하며, 경쟁사 브랜드나 기능·규격을 대상 상품에 잘못 적용하지 않는다.
+- **최적화 완료 기준**: 2~3개 후보에서 멈추지 말고 각 근거 화면·문서를 확인해 20개의 서로 다른 검색어를 채운다. 각 항목은 20자 이내이고 허용 특수문자만 쓴다. `sources.json` 과 `coupang_build.json` 에 source를 남기고, `seo_audit.py`의 `TAG_COUNT_UNDER_TARGET` BLOCK이 없어야 최종 확인 단계로 간다.
+- **검색어 부족**: 모든 근거 소스를 조사한 뒤에도 20개 미만이면 단어를 발명하지 말고 부족 수와 확인한 출처를 기록해 제출을 멈춘다. `TAG_COUNT_UNDER_TARGET` BLOCK을 해결할 때까지 추가 근거를 조사한다.
 
 ## [섹션 9] 상품정보제공고시
 - **입력법**: 카테고리 품목군 선택 → 화면 자동 표시 항목을 채운다.
@@ -80,7 +87,7 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 ## [섹션 10] 배송
 - **배송방법**: `plan.coupang.deliveryMethod` — 국내 위탁은 `일반배송(순차배송)`(profile.coupang.deliveryMethodDomestic). 해외구매대행은 `해외구매대행`(profile.coupang.deliveryMethodOverseas) + PCC·인보이스·해외 출고지 필요.
 - **택배사**: `CJ대한통운`(profile.coupang.courier).
-- **배송비**: `무료배송`(profile.coupang.shippingChargeType, 판매가에 포함).
+- **배송비**: 사용자가 확인한 구성과 현재 seller profile/live form을 따른다. 무료배송이면 배송비를 판매가에 포함하고, 유료배송이면 승인된 배송비를 별도 입력한다. 이전 상품의 무료/유료 설정을 새 상품에 임의 복사하지 않는다.
 - **출고소요일**: 국내 `2일`(profile.coupang.outboundDaysDomestic), 해외구매대행 `7~14일`(profile.coupang.outboundDaysOverseas). 사용자 운영값이 다르면 그 값.
   - **(미검증) 레거시 치트키 금지**: 구버전의 "주문제작(MAKE_ORDER)으로 출고일 20일 연장", "해외 아니어도 7~14일 필수" 는 실제 상품 조건과 다르면 허위 → 국내 상품에 임의 적용하지 않는다.
 - **묶음배송**: 출고지 등록 시 가능. **도서산간**: 출고지 설정 따름.
@@ -88,9 +95,10 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 
 ## [섹션 11] 반품/교환
 - **반품지**: 등록된 인천 반품지 선택(`profile.seller.returnAddress`).
+- **택배 계약 없음**: 공식 Coupang 판매 준비 안내 Step 11은 미계약 판매자도 반품지를 직접 입력할 수 있다고 안내한다: https://marketplace.coupang.com/mba-onepage. 기존 seller 주소록의 정확한 반품지를 확인해 사용하고 계약 상태는 `없음`으로 둔다. 대체 경로를 확인하기 전에 CJ 계약코드·고객번호를 요구하지 않는다.
 - **초도반품배송비**: `3,500`(profile.coupang.initialReturnFee).
 - **반품배송비**: `3,500`(profile.coupang.returnFee) — **초도반품비의 100~150% 규칙** 충족(3,500~5,250 범위).
-- **교환비**: 화면 자동 계산값 확인.
+- **교환비**: 별도 입력란이 없으면 프로필 값이 설정됐다고 단정하지 않는다. 제출 전 live form과 공개 고객용 페이지에서 실제 표시값을 확인한다.
 
 ## [섹션 12] 구비서류
 - 카테고리가 요구하면 사용자에게 파일 요청. 없으면 등록 중단(임의 생성·제출 금지).
@@ -99,9 +107,11 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 
 ## 최종 확인 → 등록
 13. 여기서 **멈추고** `build_confirm_table.py` 최종 확인표를 사용자에게 보여준다.
-14. 사용자가 "등록" 이라고 하면 `판매요청`. "임시저장" 이면 `저장하기`. **사용자 최종 확인 전에는 절대 클릭하지 않는다.**
-15. 결과: 등록상품ID·노출상품ID(상품조회 화면 드롭다운)를 캡처해 `plan.coupang.result` 로 기록하고, **노출상품ID 백업**을 사용자에게 알린다(상품명·태그 수정 후 ID 변경으로 노출 누락 시 쿠팡 1:1 문의 복구용).
-16. `memory/projects/naver-coupang-registration.md` History 에 한 줄 기록.
+14. 사용자가 최종 확인표를 승인한 뒤 Wing 화면에서 실제 제출 버튼을 확인해 누른다. 현재 확인된 라벨은 `상품등록`이다. UI가 다르면 스냅샷의 최종 제출 버튼을 다시 식별한다. 임시저장은 사용자가 명시적으로 요청한 경우에만 한다.
+15. 제출 뒤 상품목록의 등록상품ID·노출상품ID·옵션 ID, 승인/판매 상태와 확장 옵션행의 실재고를 확인한다. 등록 성공 알림만으로 완료 처리하지 않는다.
+16. 공개 상품 페이지에서 품절 여부와 장바구니·바로구매 버튼이 활성화됐는지 확인한다. 판매자 목록·편집 화면과 불일치하면 확장 옵션행의 실재고를 확인해 승인값으로 맞춘 후 공개 페이지를 다시 검증한다.
+17. 결과를 `plan.coupang.result`와 Argo에 기록하고, **노출상품ID 백업**을 사용자에게 알린다(상품명·태그 수정 후 ID 변경으로 노출 누락 시 쿠팡 1:1 문의 복구용). 개인정보·이미지 URL은 기록하지 않는다.
+18. `memory/projects/naver-coupang-registration.md` History 에 한 줄 기록.
 
 ## 오류 대응
 - "필수 구매옵션" 경고 → 해당 옵션을 실제 값으로 추가. 값을 모르면 사용자확인.

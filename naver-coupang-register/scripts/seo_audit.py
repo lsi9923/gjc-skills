@@ -142,7 +142,8 @@ def audit_coupang(title, tags, brand_removed):
     if len(cleaned) > 20:
         out.append(v("coupang.tags", "BLOCK", "TAG_COUNT_OVER_LIMIT", f"쿠팡 검색어는 최대 20개 ({len(cleaned)}개)"))
     elif len(cleaned) < 20:
-        out.append(v("coupang.tags", "WARN", "TAG_SLOTS_EMPTY", f"검색어 {len(cleaned)}/20개. 상품 근거 있는 키워드로 채울 수 있으면 채웁니다"))
+        out.append(v("coupang.tags", "BLOCK", "TAG_COUNT_UNDER_TARGET",
+                     f"검색어 {len(cleaned)}/20개. 제출 전 근거 있는 후보를 더 조사해야 합니다"))
     seen = set()
     for t in cleaned:
         if nlen(t) > 20:
@@ -249,6 +250,10 @@ def selftest():
     cp_good = audit_coupang("퍼즐펀치 모양펀치 종이 퍼즐 만들기 펀칭기 어린이 DIY 공예 도구",
                             [f"퍼즐키워드{i}" for i in range(20)], ["더이안"])
     assert summarize(cp_good)["ok"], cp_good
+    cp_short = audit_coupang("퍼즐펀치 이불 건조대", ["이불건조대", "빨래건조대"], [])
+    short_count = next(x for x in cp_short if x["rule"] == "TAG_COUNT_UNDER_TARGET")
+    assert short_count["severity"] == "BLOCK", short_count
+    assert summarize(cp_short)["ok"] is False, cp_short
     assert summarize(audit_naver("퍼즐펀치\t모양", [], []))["ok"] is False
     # 이호 배치 규칙: 완성형이 0번이 아니면 WARN, 조합형 순서 뒤집히면 WARN
     judg = [{"keyword": "유산균", "type": "완성형", "matchedTerms": ["유산균"]},

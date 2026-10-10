@@ -1,7 +1,9 @@
 ---
 name: coupang-sudong-skill
-description: 쿠팡 윙(Coupang Wing) 상위노출 실시간 상품등록 전문 스킬. "쿠팡 등록해줘", "쿠팡 등록", "쿠팡 상품등록", "쿠팡 윙 등록", "쿠팡으로 등록" 등의 요청 시 더미파일(모의 JSON/복붙폼) 생성을 일절 배제하고, Orca Computer Use(`orca computer`)로 활성 브라우저(1688/소싱처)를 직접 읽어 실측 스펙을 추출한 뒤, 쿠팡 윙(wing.coupang.com) 상품등록 11대 섹션(카테고리 속성, 35개 고시군, 60~90자 롱테일 상품명, 20개 검색어 태그, 옵션, AGENT_BUY 통관 설정)에 직접 자동 입력·제어한다.
+description: Legacy reference for standalone Coupang SEO analysis only. Do not activate this skill for Coupang Wing registration requests; use the unified naver-coupang-register workflow. Consult only when the user explicitly requests this legacy skill or isolated SEO analysis.
 ---
+
+> Archived registration path: for all actual Naver/Coupang product registration, follow `../naver-coupang-register/SKILL.md`. This file is a non-executable reference; do not use its standalone form flow or conflicting defaults.
 
 # 쿠팡 윙(Wing) 상위노출 실전 컴퓨터 유즈(Computer Use) 등록 프로토콜
 
