@@ -37,6 +37,11 @@ python "<skill>\scripts\prepare_product.py" "<완료폴더\N>" --out "C:\tmp\reg
 - 1688 옵션은 원문을 전부 자동 등록하지 않는다. 사용자가 쓰고 싶다고 지정한 옵션만 원문 의미와 한국어 상품 용어를 해설해 확인받고, 선택된 옵션만 네이버·쿠팡 입력값으로 구성한다. 선택이 불명확하거나 번역이 여러 의미면 임의 확정하지 않고 묻는다.
 
 ## 2. SEO 구성 (`references/seo-rules.md` 필독)
+### 검색 포화 및 필수값 완료 기준
+- 검색은 요청한 각 마켓의 자체 검색면에서 수행한다. 네이버와 쿠팡을 모두 요청받으면 각각 별도 근거를 수집한다. 한 마켓에서 관측한 검색어는 다른 마켓에서 재확인하기 전까지 쿼리 seed일 뿐 수요 근거가 아니다.
+- 제품 핵심어와 실제 관련 있는 띄어쓰기·동의어 변형을 사용해 각 검색 출처를 끝까지 조사한다. 1~2개 결과나 초기 후보 5~8개에서 멈추지 않는다. 모든 관련 source family와 query seed를 조사하고 새롭고 적합한 고유어가 더 나오지 않을 때 검색을 마친다. 호출 제한·차단은 우회하지 말고 정확히 기록한다.
+- Naver는 현재 태그 입력 한도(통상 10개), Coupang Wing은 20개까지 관련 있고 검증된 고유 검색어를 채운다. 각 term에 플랫폼, 출처, 실제 query, 캡처/JSON 경로, 상품과 맞는 이유를 남기며 중복·무관어·관측되지 않은 조합은 제외한다.
+- 제출 전 필수 seller field와 확인표에 설명 없는 빈칸이 없어야 한다. 필수값이 없으면 원상품·기존 상품·seller profile·공식 자료를 더 조사하고, 끝내 확인되지 않으면 정확한 blocker로 제출을 멈춘다. 선택 항목은 근거가 없으면 비워 두고 `미확정: 사유`로 표시한다. 빈칸을 채우려고 값을 만들지 않는다.
 1. 대표 키워드 후보: plan 의 `keywordSeeds.seeds` (원상품명·제목 꼬리·메이커 섹션 제목·메이커 seo_keywords.json, 출처 표시됨)에 1688 중국어 제목(`keywordSeeds.from1688.title`)을 한국어 상품 용어로 번역한 후보를 더한다. 브랜드(`brand.removedFromMarketing`)는 제외. 이 단계의 키워드는 모두 '후보'다.
 2. 네이버 F12(개발자도구) 근거 수집 — 이호 방식 그대로, 생략 금지. **모든 상품명·태그 확정 근거는 F12 다.**
    - 새 탭에서 `https://search.shopping.naver.com/search/all?query=<키워드>` 로 이동(사람처럼 한 번에 하나씩, 검색 사이 10~20초 간격, 강제 스크롤 최소화 — f12_live 실측상 짧은 간격·과도한 스크롤이 차단 트리거).
@@ -47,7 +52,7 @@ python "<skill>\scripts\prepare_product.py" "<완료폴더\N>" --out "C:\tmp\reg
      const f12 = String(await fs.readFile('<skill>\\scripts\\naver_f12_capture.js'));
      const ev = await page.evaluate(`(${f12})(${JSON.stringify({ target: kw })})`);
      ```
-     각 키워드 결과를 세션 작업폴더의 `<workDir>\f12\f12_<키워드>.json` 로 저장한다(수집시각·URL·경로 포함). `f12\` 폴더가 없으면 만든다 — §2-④/⑤ 의 `--in-dir`/`--f12-dir` 가 이 폴더를 읽는다(다른 산출물과 섞이지 않게 하위폴더로 분리). 후보 상위 5~8개(confidence high 우선)를 각각 검색해 모은다. `연결형` 판별이 필요하면(예: 생유산균) `생 유산균`처럼 띄운 변형도 한 번 더 검색해 같은 폴더에 저장한다(builder 가 자동으로 연결형 판정에 사용).
+     각 키워드 결과를 세션 작업폴더의 `<workDir>\f12\f12_<키워드>.json` 로 저장한다(수집시각·URL·경로 포함). `f12\` 폴더가 없으면 만든다 — §2-④/⑤ 의 `--in-dir`/`--f12-dir` 가 이 폴더를 읽는다(다른 산출물과 섞이지 않게 하위폴더로 분리). 상위 5~8개(confidence high 우선)는 초기 검색 seed다. 그 결과의 관련어와 새롭고 적합한 후보를 추가 검색해 포화 기준까지 넓힌다. `연결형` 판별이 필요하면(예: 생유산균) `생 유산균`처럼 띄운 변형도 한 번 더 검색해 같은 폴더에 저장한다(builder 가 자동으로 연결형 판정에 사용).
    - ③ (선택) 메이커 셀링 도우미 보조 근거: 확장이 활성이면 `<skill>/scripts/maker_helper_extract.js` 를 `page.evaluate(src)` 로 실행해 확장이 렌더한 텀 칩/카테고리/검색량/스마트스토어 태그를 읽는다. **F12 근거를 보조하는 참고자료로만** 병기하고, `available:false`(확장 없음/미로드)면 이 단계를 건너뛴다. 확장 파일은 수정하지 않는다.
    - ④ 카테고리 말단 확정(강의 §1): 위에서 저장한 검색결과 JSON(`naver_search_extract.js`·`naver_f12_capture.js` 출력)들을 그대로 넣어 relevance 를 합친다. 입력 JSON은 에이전트가 만들지 않는다 — F12/검색 단계에서 저장한 파일을 경로로 넘기기만 한다.
      ```
@@ -80,7 +85,7 @@ python "<skill>\scripts\prepare_product.py" "<완료폴더\N>" --out "C:\tmp\reg
      python "<skill>\scripts\coupang_helper.py" --name "<노출상품명>" --sources-json "<workDir>\sources.json" --out "<workDir>\coupang_build.json"
      ```
    - `sources.json`은 `wingRecommended`, `wingPopular`, `coupangAutocomplete`, `coupangRelatedQueries`, `naverF12`의 실제 관측어 배열을 지원한다. 원상품 사실과 동일 용도의 상품명은 query seed로만 쓰고, 검색창·추천·관련어에 실제로 나타난 표현만 최종 후보어로 넘긴다. 원본 쿼리·경로와 term별 근거는 별도 파일로 보존한다.
-   - 사용자 최신 지시상 검색어 완료 기준은 **20개의 고유 검색어**다. 1~2개에서 중단하지 말고 Wing 추천·인기검색어, Coupang 자동완성과 관련검색어를 먼저 조사한다. Naver F12·원상품 사실·유사상품 제목은 query seed로만 쓰며, 실제 Coupang-native 검색표면에서 확인한 뒤에만 최종 검색어로 채택한다. 검색어마다 출처를 남기고 타브랜드·홍보어·무관어·상품에 없는 기능이나 규격은 제외한다.
+   - 검색어 완료 기준은 **현재 Wing 한도인 고유 검색어 20개**다. Wing 추천·인기검색어, Coupang 자동완성과 관련검색어를 여러 핵심 query와 띄어쓰기 변형으로 조사해 새로운 관련어가 더 나오지 않을 때까지 확장한다. Naver F12·원상품 사실·유사상품 제목은 query seed로만 쓰며, 실제 Coupang-native 검색표면에서 확인한 뒤에만 최종 검색어로 채택한다. term마다 출처·실제 query·근거 경로·상품 적합 이유를 남기고 타브랜드·홍보어·무관어·상품에 없는 기능이나 규격은 제외한다.
    - 20개 미만이면 `seo_audit.py`의 `TAG_COUNT_UNDER_TARGET` BLOCK을 해결할 때까지 제출하지 않는다. 부족한 수와 조사한 출처를 기록하고 추가 근거를 계속 찾는다. 빈칸을 지어낸 단어로 채우지 않는다.
    - 카테고리 후보를 만들기 전에 최신 공식 Wing 전체 분류표 또는 전체 카테고리 API를 확보한다. 출처·버전·조회일·행 수를 기록하고 상품 용도에 맞는 전체 말단 후보를 비교한 뒤 live picker에서 동일한 선택 가능 leaf를 확인한다. 단일 후보나 오래된 코드표만 보고 결정하지 않는다.
    - 카테고리 말단 확정: Wing 카테고리 검색/추천 화면에서 읽은 후보만 `candidates.json`(`{"candidates":[{"path":..,"code":..,"leaf":..,"topSeller":true|false}]}`)으로, 화면 필수옵션/필터 스펙은 `attributes.json`(`{"required":[{"name","type","unit","values":[]}]}`)으로 만들어 넣는다(경로를 지어내지 않는다). 상품 사실은 `product.json`(`{productName, naverCategoryPath, keywords, options, attributesEvidence}`).
@@ -121,6 +126,7 @@ python "<skill>\scripts\build_confirm_table.py" --plan "<workDir>\registration_p
 ```
 - `--markets naver,coupang` 로 표시 마켓을 고를 수 있다(기본: plan 에 있는 것).
 - 빈 값은 `미확정`, seo_audit ok 라도 상품명이 비면 `검사 대상 없음`, blockers/needsUser 는 표 상단에 노출된다. 값을 발명하지 않는다.
+- 필수값이 `미확정`이면 blockers/needsUser에 원인과 확인한 출처를 적고 제출을 멈춘다. 선택값이 근거 없이 비어 있으면 확인표에 `미확정: 사유`로 표시한다. Coupang은 생성된 최종 확인표와 별도로 `search_terms_evidence.json`의 term·source·query·evidence를 항목별로 사용자에게 보여준다.
 - 생성된 `confirm.md` 를 사용자에게 그대로 보여주고 확인을 받는다.
 
 표 구성(build_confirm_table 출력):
@@ -135,8 +141,8 @@ python "<skill>\scripts\build_confirm_table.py" --plan "<workDir>\registration_p
 
 (B) 최종 확인표: 카테고리, 상품명(글자수), 판매가/정상가, 옵션·재고, 대표/추가 이미지 수, 상세 이미지 수, 브랜드/제조사/원산지, 고시 요약, 배송·반품비, 쿠팡 검색어 20/20과 검색필터 자동채우기 후 적용값, SEO 검사 WARN/BLOCK(IHO_HEAD_COMPLETE/IHO_COMBO_ORDER 포함), 검색품질 체크 결과.
 
-사용자가 "등록"/"진행"이라고 하면 네이버 `저장하기`, 쿠팡은 현재 화면의 최종 제출 버튼(확인된 라벨 `상품등록`)을 누른다. "임시저장"이면 해당 마켓의 화면상 임시저장 기능만 사용한다. 사용자 확인 전에는 절대 클릭하지 않는다.
-등록 후 상품번호(네이버), 등록상품ID·노출상품ID·옵션 ID(쿠팡)를 캡처해 plan 에 기록하고 보고한다. 제출 완료 알림만으로 완료 처리하지 않는다. Wing 상품목록과 확장 옵션행에서 승인상태·판매상태·실재고를 확인하고, 공개 상품페이지의 품절 여부와 장바구니·바로구매 상태로 실제 판매 가능성을 검증한다. 화면끼리 불일치하면 원인을 조사해 승인된 값과 맞춘 뒤 다시 검증한다.
+사용자가 확인표를 승인한 뒤 현재 스냅샷에서 최종 버튼을 다시 식별한다. 신규 Wing 등록은 `상품등록`, 기존 상품 수정은 `수정 및 검수 요청`일 수 있다. 수정 확인창에 `수정요청 하시겠습니까?`가 표시되면 승인된 표와 동일한 변경인지 확인한 뒤에만 `확인`을 누른다. 예상과 다른 동작·대상·값이면 멈추고 다시 승인받는다. "임시저장"이면 해당 마켓의 화면상 임시저장 기능만 사용한다. 사용자 확인 전에는 절대 클릭하지 않는다.
+제출 뒤 네이버 상품번호, Coupang 등록상품ID·노출상품ID·vendorItemID를 캡처해 `plan`에 기록하고 보고한다. 제출 완료 알림만으로 완료 처리하지 않는다. Wing 상태 이력과 상품목록에서 승인상태·판매상태·실재고를 확인하고, 상품을 다시 열어 검색어·필터가 실제로 저장됐는지 검증한다. 공개 상품페이지를 새로 열어 품절 여부와 장바구니·바로구매 버튼을 확인한다. 화면끼리 불일치하면 원인을 조사해 승인된 값과 맞춘 뒤 다시 검증한다.
 
 ## 5. Argo 자동 연결과 기록
 - 사용자가 별도로 말하지 않아도 등록 시작 전에 Argo `끄쫀꾸` 허브와 원본 상품·SEO·등록 기록을 읽는다.
