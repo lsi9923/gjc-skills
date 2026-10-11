@@ -1,15 +1,84 @@
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from pathlib import Path
+from urllib.parse import urlparse
 import json
+import re
+from difflib import SequenceMatcher
 
 EXCEL_PATH = Path(r"C:/Users/imda0/Desktop/해외구매대행_사입_TOP50_상품리뷰_수집분석.xlsx")
 JSON_PATH = Path(r"C:/tmp/product_selling_points.json")
+SOURCE_EXCEL_PATH = Path(r"C:/Users/imda0/Desktop/해외구매대행_사입_추천상품_TOP50.xlsx")
+
+def _normalize_name(value):
+    return "".join(ch.casefold() for ch in str(value or "") if ch.isalnum())
+
+
+def _load_product_links():
+    """Load the original product, 1688 sourcing-search and Naver price-check URLs."""
+    if not SOURCE_EXCEL_PATH.is_file():
+        raise FileNotFoundError(f"원본 추천 엑셀을 찾을 수 없습니다: {SOURCE_EXCEL_PATH}")
+    source_wb = openpyxl.load_workbook(SOURCE_EXCEL_PATH, data_only=True, read_only=False)
+    if "전체 통합 TOP 50" not in source_wb.sheetnames:
+        raise KeyError("원본 엑셀에 '전체 통합 TOP 50' 시트가 없습니다.")
+    source_ws = source_wb["전체 통합 TOP 50"]
+    links = []
+    for row in range(2, source_ws.max_row + 1):
+        name = str(source_ws.cell(row, 5).value or "").strip()
+        if not name:
+            continue
+        def value_or_hyperlink(col):
+            cell = source_ws.cell(row, col)
+            return (cell.hyperlink.target if cell.hyperlink else cell.value) or ""
+        links.append({
+            "name": name,
+            "coupang": str(value_or_hyperlink(18)).strip(),
+            "1688": str(value_or_hyperlink(20)).strip(),
+            "naver": str(value_or_hyperlink(21)).strip(),
+        })
+    return links
+
+
+def _match_product_links(product_name, link_rows):
+    target = _normalize_name(product_name)
+    if not target:
+        return {"coupang": "", "1688": "", "naver": "", "matched_name": ""}
+    ranked = []
+    for item in link_rows:
+        candidate = _normalize_name(item["name"])
+        if not candidate:
+            continue
+        if target == candidate:
+            score = 2.0
+        elif target in candidate or candidate in target:
+            score = 1.0 + min(len(target), len(candidate)) / max(len(target), len(candidate))
+        else:
+            score = SequenceMatcher(None, target, candidate).ratio()
+        ranked.append((score, item))
+    if not ranked:
+        return {"coupang": "", "1688": "", "naver": "", "matched_name": ""}
+    score, best = max(ranked, key=lambda pair: pair[0])
+    if score < 0.72:
+        return {"coupang": "", "1688": "", "naver": "", "matched_name": ""}
+    return {**best, "matched_name": best["name"], "match_score": score}
+
+
+def _purchase_link_label(url):
+    host = urlparse(url).netloc.casefold()
+    if "coupang.com" in host:
+        return "쿠팡 상품 열기"
+    if "naver.com" in host:
+        return "네이버 원본상품 열기"
+    if url:
+        return "원본 판매처 열기"
+    return "원본 링크 미확인"
+
 
 def append_selling_points_sheet():
     with open(JSON_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
     products = data.get("products", [])
+    product_links = _load_product_links()
 
     wb = openpyxl.load_workbook(EXCEL_PATH)
     sheet_title = "상품별 핵심 소구점 및 카피"
@@ -33,7 +102,9 @@ def append_selling_points_sheet():
     )
 
     headers = [
-        "순번", "추천 순위", "상품명", "카테고리", "근거 신뢰도",
+        "순번", "추천 순위", "상품명", "카테고리",
+        "🛒 원본 상품/쿠팡 링크 (클릭)", "🇨🇳 1688 최저가 사입 검색 (클릭)", "🔍 네이버 가격비교 (클릭)",
+        "근거 신뢰도",
         "킬러 메인 헤드라인 (클릭 유발)", "서브 설명 카피 (실질 혜택)",
         "📋 원클릭 마케팅 기획 종합본 (복사용)",
         "고객 핵심 결핍 (Pain Point)", "제품 핵심 해결책 (Solution)",
@@ -68,6 +139,10 @@ def append_selling_points_sheet():
                 cat_val = v
                 break
 
+        links = _match_product_links(p_name, product_links)
+        if not links.get("matched_name"):
+            print(f"[WARN] 추천 원본 링크 매칭 실패: {p_name}")
+
         # Refined headlines by Antigravity recommendations
         hl = p.get("headline", "")
         if "손 다칠 걱정 끝" in hl: hl = "푸드홀더로 안전하게, 균일한 채썰기"
@@ -84,6 +159,9 @@ def append_selling_points_sheet():
             f"【 {p_name} - 마케팅 기획 요약 】",
             f"■ 킬러 헤드라인: {hl}",
             f"■ 서브 카피: {p.get('sub_copy', '')}",
+            f"■ 원본 상품/쿠팡 구매 링크: {links.get('coupang') or '원본 링크 미확인'}",
+            f"■ 1688 최저가 사입 검색: {links.get('1688') or '검색 링크 미확인'}",
+            f"■ 네이버 가격비교: {links.get('naver') or '비교 링크 미확인'}",
             "",
             "■ 고객 핵심 결핍 (Pain Point):",
             f"  {p.get('pain_point', '')}",
@@ -110,6 +188,9 @@ def append_selling_points_sheet():
             f"{idx}위",
             p_name,
             cat_val,
+            _purchase_link_label(links.get("coupang", "")),
+            "1688 최저가 사입 검색" if links.get("1688") else "1688 링크 미확인",
+            "네이버 가격비교 열기" if links.get("naver") else "네이버 링크 미확인",
             p.get("evidence_confidence", "보통"),
             hl,
             p.get("sub_copy", ""),
@@ -123,21 +204,29 @@ def append_selling_points_sheet():
         ]
         ws.append(row_vals)
         r_num = idx + 1
-        ws.row_dimensions[r_num].height = 110
+        ws.row_dimensions[r_num].height = 220
 
         for c_idx in range(1, len(row_vals) + 1):
             cell = ws.cell(r_num, c_idx)
             cell.border = border
-            if c_idx == 6:
+            if c_idx in (5, 6, 7):
+                link_value = row_vals[c_idx - 1]
+                link_url = links.get({5: "coupang", 6: "1688", 7: "naver"}[c_idx], "")
+                if link_url:
+                    cell.hyperlink = link_url
+                    cell.font = Font(name="맑은 고딕", size=9, color="0563C1", underline="single")
+                else:
+                    cell.font = body_font
+            elif c_idx == 9:
                 cell.font = hook_font
-            elif c_idx in (2, 5):
+            elif c_idx in (2, 8):
                 cell.font = bold_body_font
             else:
                 cell.font = body_font
 
-            align_h = "center" if c_idx in (1, 2, 4, 5) else "left"
+            align_h = "center" if c_idx in (1, 2, 4, 8) else "left"
             cell.alignment = Alignment(horizontal=align_h, vertical="center", wrap_text=True)
-            if c_idx == 8:
+            if c_idx == 11:
                 cell.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid") # 연노랑 복사강조
 
     # Column widths
@@ -145,16 +234,22 @@ def append_selling_points_sheet():
     ws.column_dimensions["B"].width = 11
     ws.column_dimensions["C"].width = 30
     ws.column_dimensions["D"].width = 14
-    ws.column_dimensions["E"].width = 14
-    ws.column_dimensions["F"].width = 32
-    ws.column_dimensions["G"].width = 34
-    ws.column_dimensions["H"].width = 55  # 📋 원클릭 복사본 열 넓게
-    ws.column_dimensions["I"].width = 38
-    ws.column_dimensions["J"].width = 38
-    ws.column_dimensions["K"].width = 45
+    ws.column_dimensions["E"].width = 23
+    ws.column_dimensions["F"].width = 24
+    ws.column_dimensions["G"].width = 24
+    ws.column_dimensions["H"].width = 14
+    ws.column_dimensions["I"].width = 32
+    ws.column_dimensions["J"].width = 34
+    ws.column_dimensions["K"].width = 55  # 📋 원클릭 복사본 열 넓게
     ws.column_dimensions["L"].width = 38
-    ws.column_dimensions["M"].width = 40
-    ws.column_dimensions["N"].width = 35
+    ws.column_dimensions["M"].width = 38
+    ws.column_dimensions["N"].width = 45
+    ws.column_dimensions["O"].width = 38
+    ws.column_dimensions["P"].width = 40
+    ws.column_dimensions["Q"].width = 35
+
+    matched = sum(1 for p in products if _match_product_links(p.get("product", ""), product_links).get("matched_name"))
+    print(f"[LINKS] 원본 상품 링크 매칭: {matched}/{len(products)}개")
 
     try:
         wb.save(EXCEL_PATH)
