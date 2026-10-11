@@ -282,11 +282,19 @@ def build_v3_workbook(top_agency: list[dict], top_sourcing: list[dict], out_path
 
     wb.remove(default_ws)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(out_path)
+    saved_path = out_path
+    try:
+        wb.save(out_path)
+    except PermissionError:
+        import time
+        saved_path = out_path.with_name(f"{out_path.stem}_{time.strftime('%H%M%S')}{out_path.suffix}")
+        wb.save(saved_path)
+        print(f"[안내] 대상 엑셀 파일이 열려 있어 다음 경로로 저장되었습니다: {saved_path}")
+
     verified_cnt = sum(1 for x in all_50 if x.get("img_verified_200"))
     return {
-        "out_path": str(out_path),
-        "file_size": out_path.stat().st_size,
+        "out_path": str(saved_path),
+        "file_size": saved_path.stat().st_size,
         "agency_count": len(top_agency),
         "sourcing_count": len(top_sourcing),
         "total_count": len(all_50),
