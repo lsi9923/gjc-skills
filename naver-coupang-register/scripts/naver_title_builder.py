@@ -58,7 +58,7 @@ TYPE_NOT_APPLIED = "미적용"
 TYPE_SYNONYM = "동의어"
 TYPE_UNKNOWN = "판정불가"
 
-PROMOTIONAL = {"최저가", "할인", "특가", "세일", "쿠폰", "무료배송", "당일발송", "이벤트", "한정수량",
+PROMOTIONAL = {"최저가", "할인", "특가", "세일", "쿠폰", "오늘출발", "오늘발송", "당일발송", "당일출고", "무료배송", "빠른배송", "무료배송", "당일발송", "이벤트", "한정수량",
                "품절임박", "1+1", "2+1", "사은품", "정품", "추천", "인기", "신형", "고급", "베스트", "필수템"}
 
 
@@ -173,8 +173,10 @@ def load_f12(path: Path):
     blocked = bool(data.get("blockedOrCaptcha"))
     note = data.get("schemaNote") or data.get("note") or ""
     ok = bool(terms) and not blocked
+    top_tags = data.get("topTagFrequency") or (data.get("searchExtract") or {}).get("topTagFrequency") or []
     return {"keyword": kw, "terms": terms, "intersection": inter, "categories": cats,
-            "blocked": blocked, "note": note, "ok": ok, "totalCount": data.get("totalCount")}
+            "blocked": blocked, "note": note, "ok": ok, "totalCount": data.get("totalCount"),
+            "topTagFrequency": top_tags}
 
 
 # ---------------------------------------------------------------- 이호 5분류 판정
@@ -279,7 +281,7 @@ def _order_key(word, volume):
     return (-int(volume.get(word, 0)), len(compact(word)))
 
 
-def build_title(judgements, volume=None, brand_removed=None, max_hard=100, warn_lo=25, warn_hi=30):
+def build_title(judgements, volume=None, brand_removed=None, max_hard=100, warn_lo=25, warn_hi=30, brand_prefix="끄롱마제"):
     """이호 §4 규칙으로 상품명 후보 조립.
 
     전략:
@@ -290,6 +292,7 @@ def build_title(judgements, volume=None, brand_removed=None, max_hard=100, warn_
     """
     volume = volume or {}
     brand_removed = set(compact(b) for b in (brand_removed or []) if b)
+    promo_compact = set(compact(p) for p in PROMOTIONAL)
 
     completes, linkeds, combos = [], [], []
     for j in judgements:
@@ -303,13 +306,26 @@ def build_title(judgements, volume=None, brand_removed=None, max_hard=100, warn_
         elif t == TYPE_COMBO:
             combos.append(j)
 
+    # 만약 F12 terms 미제공으로 completes가 비어있으면 query에서 명사 키워드 폴백
+    if not completes and not combos:
+        fallback_words = []
+        for j in judgements:
+            kw = j.get("keyword") or ""
+            for part in kw.split():
+                if len(part) >= 2 and compact(part) not in brand_removed and compact(part) not in promo_compact:
+                    fallback_words.append(part)
+        fallback_words = list(dict.fromkeys(fallback_words))
+        if fallback_words:
+            completes = [fallback_words[0]]
+            for fw in fallback_words[1:]:
+                combos.append({"keyword": fw, "type": TYPE_COMBO, "matchedTerms": [fw]})
+
     completes = list(dict.fromkeys(completes))
     linkeds = list(dict.fromkeys(linkeds))
     completes.sort(key=lambda w: _order_key(w, volume))
 
     # 상품명에 절대 넣지 않을 조각(브랜드 제거대상 · 홍보어).
     # 조합형 matchedTerms 로 브랜드/홍보어가 새어들어가는 것을 push() 단일 관문에서 차단(절대 규칙·§8.1).
-    promo_compact = set(compact(p) for p in PROMOTIONAL)
 
     def _is_forbidden_segment(tok):
         ct = compact(tok)
@@ -335,6 +351,9 @@ def build_title(judgements, volume=None, brand_removed=None, max_hard=100, warn_
             parts.append(tok)
             token_count[compact(tok)] = token_count.get(compact(tok), 0) + 1
 
+        # 0) 자체 브랜드 prefix (끄롱마제)
+        if brand_prefix:
+            push(brand_prefix)
         # 1) 완성형 (좌측)
         for w in completes:
             push(w)
@@ -488,6 +507,26 @@ def build_tags(judgements, title_words, volume=None, brand_removed=None, limit=1
         seen.add(ckw)
         if len(cands) >= limit:
             break
+
+    # 2) 관측된 경쟁 상품 상위 태그(topTagFrequency)에서 최대 10개까지 보강
+    if len(cands) < limit:
+        for j in judgements:
+            for item in j.get("topTagFrequency") or []:
+                tag_word = item[0] if isinstance(item, (list, tuple)) and item else str(item)
+                ctag = compact(tag_word)
+                if not ctag or ctag in in_title or ctag in seen or ctag in brand_removed:
+                    continue
+                if any(p in ctag for p in PROMOTIONAL):
+                    continue
+                if len(ctag) < 2 or len(ctag) > 15:
+                    continue
+                cands.append({"tag": ctag, "type": "관측태그", "basis": "네이버쇼핑 상위빈도 태그", "monthlyVolume": None})
+                seen.add(ctag)
+                if len(cands) >= limit:
+                    break
+            if len(cands) >= limit:
+                break
+
     return cands
 
 
@@ -533,7 +572,7 @@ def verify_title(title, all_terms, all_inter):
 
 # ---------------------------------------------------------------- 메인 파이프라인
 
-def run(f12_results, *, brand_removed=None, volume=None, synonym_pool=None):
+def run(f12_results, *, brand_removed=None, volume=None, synonym_pool=None, brand_prefix=None):
     brand_removed = brand_removed or []
     volume = volume or {}
     # 띄어쓰기 재검색 매칭: "생유산균" 판정 시 "생 유산균" 결과가 있으면 연결형 판별에 사용(강의 2-3).
@@ -564,9 +603,10 @@ def run(f12_results, *, brand_removed=None, volume=None, synonym_pool=None):
         j = classify(kw, r["terms"], r["intersection"], spaced_result=spaced, synonym_pool=synonym_pool)
         j["categoryTop"] = _top_category(r["categories"])
         j["blocked"] = r["blocked"]
+        j["topTagFrequency"] = r.get("topTagFrequency") or (r.get("searchExtract") or {}).get("topTagFrequency") or []
         judgements.append(j)
 
-    titles = build_title(judgements, volume=volume, brand_removed=brand_removed)
+    titles = build_title(judgements, volume=volume, brand_removed=brand_removed, brand_prefix=brand_prefix)
     title_words = []
     if titles:
         title_words = nfc(titles[0]["title"]).split()
@@ -613,11 +653,17 @@ def _top_category(cats):
 
 def load_facts(path: Path):
     brand_removed, volume = [], {}
+    brand_prefix = "끄롱마제"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        return brand_removed, volume
+        return brand_removed, volume, brand_prefix
     if isinstance(data, dict):
+        own = (data.get("seller") or {}).get("ownBrands") or (data.get("brand") or {}).get("ownKept")
+        if isinstance(own, list) and own:
+            brand_prefix = nfc(own[0])
+        elif isinstance(own, str) and own:
+            brand_prefix = nfc(own)
         br = (data.get("brand") or {}).get("removedFromMarketing")
         if isinstance(br, list):
             brand_removed = [nfc(b) for b in br if b]
@@ -706,6 +752,7 @@ def main():
     ap.add_argument("--facts", help="registration_plan.json 또는 facts.json")
     ap.add_argument("--brand-removed", default="")
     ap.add_argument("--search-volume", help='{"키워드": 월검색수} JSON')
+    ap.add_argument("--own-brand", default="끄롱마제", help="자체 브랜드명 (상품명 맨 앞 배치)")
     ap.add_argument("--out", help="결과 JSON 저장 경로")
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
@@ -735,7 +782,7 @@ def main():
         except Exception:
             pass
 
-    res = run(f12_results, brand_removed=brand_removed, volume=volume)
+    res = run(f12_results, brand_removed=brand_removed, volume=volume, brand_prefix=a.own_brand)
     res["inputs"] = {"f12Files": [str(p) for p in paths], "brandRemoved": brand_removed,
                      "hasSearchVolume": bool(volume)}
     text = json.dumps(res, ensure_ascii=False, indent=2)
