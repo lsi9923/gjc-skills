@@ -35,6 +35,7 @@ def append_selling_points_sheet():
     headers = [
         "순번", "추천 순위", "상품명", "카테고리", "근거 신뢰도",
         "킬러 메인 헤드라인 (클릭 유발)", "서브 설명 카피 (실질 혜택)",
+        "📋 원클릭 마케팅 기획 종합본 (복사용)",
         "고객 핵심 결핍 (Pain Point)", "제품 핵심 해결책 (Solution)",
         "3대 핵심 소구점 (Appeal Points)", "구매 전환 트리거 (결제 결심 이유)",
         "실구매 고객 리얼 인용구", "표시광고 주의사항 (과장 방지)"
@@ -78,6 +79,32 @@ def append_selling_points_sheet():
         quotes_text = "\n".join(f'"{q}"' for q in p.get("evidence_quotes", []))
         avoid_text = "\n".join(f"• {a}" for a in p.get("avoid_claims", []))
 
+        # 원클릭 통합 복사본 텍스트 조립
+        all_in_one = [
+            f"【 {p_name} - 마케팅 기획 요약 】",
+            f"■ 킬러 헤드라인: {hl}",
+            f"■ 서브 카피: {p.get('sub_copy', '')}",
+            "",
+            "■ 고객 핵심 결핍 (Pain Point):",
+            f"  {p.get('pain_point', '')}",
+            "",
+            "■ 제품 핵심 해결책 (Solution):",
+            f"  {p.get('solution', '')}",
+            "",
+            "■ 3대 핵심 소구점 (Selling Points):",
+            appeal_text,
+            "",
+            "■ 구매 전환 트리거 (결제 결심 이유):",
+            f"  {p.get('purchase_trigger', '')}",
+            "",
+            "■ 실구매 고객 리얼 후기 인용:",
+            quotes_text,
+            "",
+            "■ 과장 방지 및 상세페이지 주의사항:",
+            avoid_text
+        ]
+        all_in_one_text = "\n".join(all_in_one)
+
         row_vals = [
             idx,
             f"{idx}위",
@@ -86,6 +113,7 @@ def append_selling_points_sheet():
             p.get("evidence_confidence", "보통"),
             hl,
             p.get("sub_copy", ""),
+            all_in_one_text,
             p.get("pain_point", ""),
             p.get("solution", ""),
             appeal_text,
@@ -95,7 +123,7 @@ def append_selling_points_sheet():
         ]
         ws.append(row_vals)
         r_num = idx + 1
-        ws.row_dimensions[r_num].height = 85
+        ws.row_dimensions[r_num].height = 110
 
         for c_idx in range(1, len(row_vals) + 1):
             cell = ws.cell(r_num, c_idx)
@@ -109,6 +137,8 @@ def append_selling_points_sheet():
 
             align_h = "center" if c_idx in (1, 2, 4, 5) else "left"
             cell.alignment = Alignment(horizontal=align_h, vertical="center", wrap_text=True)
+            if c_idx == 8:
+                cell.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid") # 연노랑 복사강조
 
     # Column widths
     ws.column_dimensions["A"].width = 7
@@ -118,12 +148,13 @@ def append_selling_points_sheet():
     ws.column_dimensions["E"].width = 14
     ws.column_dimensions["F"].width = 32
     ws.column_dimensions["G"].width = 34
-    ws.column_dimensions["H"].width = 38
+    ws.column_dimensions["H"].width = 55  # 📋 원클릭 복사본 열 넓게
     ws.column_dimensions["I"].width = 38
-    ws.column_dimensions["J"].width = 45
-    ws.column_dimensions["K"].width = 38
-    ws.column_dimensions["L"].width = 40
-    ws.column_dimensions["M"].width = 35
+    ws.column_dimensions["J"].width = 38
+    ws.column_dimensions["K"].width = 45
+    ws.column_dimensions["L"].width = 38
+    ws.column_dimensions["M"].width = 40
+    ws.column_dimensions["N"].width = 35
 
     try:
         wb.save(EXCEL_PATH)
