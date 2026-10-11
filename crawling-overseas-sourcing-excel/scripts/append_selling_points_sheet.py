@@ -14,8 +14,16 @@ def _normalize_name(value):
     return "".join(ch.casefold() for ch in str(value or "") if ch.isalnum())
 
 
+def _direct_1688_offer(url):
+    """Accept only a direct 1688 offer detail page, never a keyword search URL."""
+    parsed = urlparse(str(url or "").strip())
+    if parsed.hostname != "detail.1688.com":
+        return ""
+    return str(url).strip() if re.fullmatch(r"/offer/\d+\.html", parsed.path) else ""
+
+
 def _load_product_links():
-    """Load the original product, 1688 sourcing-search and Naver price-check URLs."""
+    """Load source URLs, rejecting 1688 search pages as product links."""
     if not SOURCE_EXCEL_PATH.is_file():
         raise FileNotFoundError(f"원본 추천 엑셀을 찾을 수 없습니다: {SOURCE_EXCEL_PATH}")
     source_wb = openpyxl.load_workbook(SOURCE_EXCEL_PATH, data_only=True, read_only=False)
@@ -33,7 +41,7 @@ def _load_product_links():
         links.append({
             "name": name,
             "coupang": str(value_or_hyperlink(18)).strip(),
-            "1688": str(value_or_hyperlink(20)).strip(),
+            "1688": _direct_1688_offer(value_or_hyperlink(20)),
             "naver": str(value_or_hyperlink(21)).strip(),
         })
     return links
@@ -103,7 +111,7 @@ def append_selling_points_sheet():
 
     headers = [
         "순번", "추천 순위", "상품명", "카테고리",
-        "🛒 원본 상품/쿠팡 링크 (클릭)", "🇨🇳 1688 최저가 사입 검색 (클릭)", "🔍 네이버 가격비교 (클릭)",
+        "🛒 원본 상품/쿠팡 링크 (클릭)", "🇨🇳 1688 상품 상세페이지 (직접 오퍼)", "🔍 네이버 가격비교 (클릭)",
         "근거 신뢰도",
         "킬러 메인 헤드라인 (클릭 유발)", "서브 설명 카피 (실질 혜택)",
         "📋 원클릭 마케팅 기획 종합본 (복사용)",
@@ -160,7 +168,7 @@ def append_selling_points_sheet():
             f"■ 킬러 헤드라인: {hl}",
             f"■ 서브 카피: {p.get('sub_copy', '')}",
             f"■ 원본 상품/쿠팡 구매 링크: {links.get('coupang') or '원본 링크 미확인'}",
-            f"■ 1688 최저가 사입 검색: {links.get('1688') or '검색 링크 미확인'}",
+            f"■ 1688 실제 사입 상품 상세페이지: {links.get('1688') or '정확 일치 오퍼 미확인'}",
             f"■ 네이버 가격비교: {links.get('naver') or '비교 링크 미확인'}",
             "",
             "■ 고객 핵심 결핍 (Pain Point):",
@@ -189,7 +197,7 @@ def append_selling_points_sheet():
             p_name,
             cat_val,
             _purchase_link_label(links.get("coupang", "")),
-            "1688 최저가 사입 검색" if links.get("1688") else "1688 링크 미확인",
+            "1688 상품상세 열기" if links.get("1688") else "직접 상품 확인 안 됨",
             "네이버 가격비교 열기" if links.get("naver") else "네이버 링크 미확인",
             p.get("evidence_confidence", "보통"),
             hl,
