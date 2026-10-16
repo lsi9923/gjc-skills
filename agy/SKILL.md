@@ -31,12 +31,12 @@ cat > /tmp/agy_prompt.txt <<'EOF'
 EOF
 agy -p "$(cat /tmp/agy_prompt.txt)" \
   --dangerously-skip-permissions \
-  --model gemini-3.7-flash-high \
+  --model gemini-3.8-flash-high \
   --print-timeout 10m > /tmp/agy_run.log 2>&1
 tail -40 /tmp/agy_run.log
 ```
 
-- `--model`: 빠른 검수·단숨 작업 `gemini-3.7-flash-high`, 정밀/긴 문서 작업 `gemini-3.1-pro-high`.
+- `--model`: 빠른 검수·단숨 작업 `gemini-3.8-flash-high`, 정밀/긴 문서 작업 `gemini-3.1-pro-high`.
 - `--print-timeout`: **기본 5m은 실전에선 부족하다**(타임아웃 `Error: timeout waiting for response`로 죽는 걸 실제로 당했다). 단숨 5~10m, 문서 작업 15~20m.
 - bash 도구에서는 **포그라운드로 실행**한다. `nohup ... &` 백그라운드는 세션 종료 때
   프로세스 그룹째 죽는 것을 실측으로 확인했다(로그 0바이트로 소멸). 도구 timeout을

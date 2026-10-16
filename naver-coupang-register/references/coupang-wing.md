@@ -20,10 +20,11 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 ---
 
 ## [섹션 1] 노출 카테고리
-- **입력값**: Wing 카테고리 검색/추천 화면에 **실제로 뜬 후보만** `candidates.json` 으로 만들어 `coupang_category_pick.py` 로 점수화한 `coupang_category.json` 의 `categoryCandidates`(score·reasons) 중 확정 말단(= `plan.coupang.categoryPath`).
-- **입력법**: 카테고리 검색 → 추천/검색 결과에서 말단 선택. 상위 판매자 경로(candidates 의 `topSeller`)와 대조.
+- **입력값**: Wing 카테고리 검색창에 상품 핵심어를 입력해 나온 상위 1~3 추천 중 상품과 맞는 선택 가능 말단 ID/경로.
+- **입력법**: 추천 후보의 경로와 말단 ID를 확인하고 실제 상품의 용도·형태와 가장 일치하는 후보를 선택한다. 전체 공식 taxonomy/API 또는 약 5.5만 행 분류표 수집·비교, 상위 판매자 대조는 하지 않는다.
 - **확인**: 선택 후 카테고리가 확정되면 [섹션 9 고시]·[섹션 7 속성] 스키마가 동적으로 바뀐다 — 두 섹션이 다시 로드됐는지 확인.
-- **함정**: `categoryCandidates=[]`(화면에 후보 없음)면 경로를 지어내지 말고 화면에서 다시 읽는다.
+- **대체 경로**: 상위 1~3개에 맞는 후보가 없으면 query를 한 번 좁혀 재검색한다. 그래도 없으면 동일상품 seller listing ID → 이전에 기록된 공식 ID → 정확히 일치하는 원상품 공개 Coupang path 순으로 확인한다. 후보마다 공식 tree 1회 조회/official lookup 1회와 live 선택으로 말단·활성·상품 용도를 검증한다. 검증된 후보가 없으면 Coupang만 blocker로 두고 다른 마켓은 계속한다. 후보가 충돌하면 확인표에 보여주고 사용자가 선택한다.
+- **기록**: `plan.coupang.categoryEvidence`에 fallback source/ref, categoryId/path, 공식 조회 결과, liveSelected, `comparisonScope:"bounded_fallback"`, `fullTaxonomyComparison:false`를 남긴다. 전체 taxonomy 비교 또는 `fullLeafComparison:true`라고 기록하지 않는다.
 
 ## [섹션 2] 상품명
 - **노출상품명**: `coupang_build.json` 의 `exposureName`(옵션값·브랜드 제거된 제품명, ≤100자) = `plan.coupang.productName`.
@@ -56,7 +57,7 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 - **함정**: `detail_page.png` 용량 오류(3MB 초과 등) 시 사용자에게 알림. 이호 자료·임의 SEO 카드 이미지 추가 금지.
 
 ## [섹션 6] 상품 주요정보
-- **브랜드**: `브랜드 없음` 체크(브랜드 제거 규칙). `plan.brand.ownKept` 가 있으면 그 값.
+- **브랜드**: `끄롱마제`를 입력한다. 제3자 브랜드는 마케팅 필드에서 제거한다.
 - **제조사**: `plan.notice.제조자/수입자`(원상품 제조자/수입자). 모르면 **사용자확인**(구버전의 "모르면 브랜드명과 동일" 은 임의값 → 하지 않는다).
 - **모델명**: 비움 가능.
 - **원산지**: `plan.notice.제조국` 근거값. 없으면 `중국`(profile.coupang.originDefault).
@@ -66,19 +67,14 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 ## [섹션 7] 검색필터(속성)
 - **입력값**: 화면에 뜬 필터 스펙을 `attributes.json` 으로 만들어 `coupang_category_pick.py --attributes-json` 판정 → `coupang_category.json` 의 `attributes.filled`(색상=쿠팡 표준명·숫자형=숫자만·enum 일치)만 선택. `attributes.empty` 는 **비운다**.
 - **원칙**: 원상품 근거가 있는 항목만. 무관한 속성을 남발하면 알고리즘 일치도 하락(구버전·현행 공통).
-- **자동채우기**: 카테고리·상품명·옵션/기본정보 입력 후 `AI로 검색필터 채우기` 버튼이 보이면 클릭한다(실제 라벨은 현재 화면 스냅샷에서 확인). 고정 시간으로 기다리지 말고 로딩 완료 또는 속성 버튼의 `선택하세요`→구체적인 enum 값 변경을 관찰한 뒤 스냅샷을 다시 찍는다. 자동값은 제안값으로만 취급한다.
-- **수정 및 확인**: 근거 없는 자동값은 비우고, 잘못된 값은 근거 있는 표준값으로 바꾼다. 자동으로 채워지지 않은 필수 속성은 실제 근거가 있을 때만 입력한다. 최종 적용값을 `plan.coupang.attributes` 및 사용자 확인표에 반영한다. 버튼이 없으면 자동채우기를 실행한 것처럼 기록하지 않는다.
-- 자동채움 결과가 `coupang_category.json`의 예상 속성과 다르면 live 스펙과 적용값으로 `attributes.json`을 갱신하고 `coupang_category_pick.py` 및 `apply_to_plan.py`를 다시 실행한다. plan 필드는 손으로 편집하지 않는다.
+- **자동채우기**: `AI로 검색필터 채우기`는 선택 기능이다. 사용하면 화면에서 실제 필수로 표시된 값과 상품 사실만 확인한다. 전체 선택 필터 감사는 제출 게이트가 아니다.
+- **수정 및 확인**: 근거 없는 자동값은 비우고, 잘못된 값은 원상품 근거가 있을 때만 수정한다. 실제 필수 속성만 입력한다. 버튼이 없으면 실행했다고 기록하지 않는다. 선택값 차이 때문에 등록 계획이나 JSON 감사를 반복하지 않는다.
 - **확인**: 필수 속성이 채워졌는지, empty 로 둔 항목이 필수 경고를 내지 않는지, 화면에 보이는 각 적용값이 plan 및 원상품 근거와 같은지 확인한다.
 
 ## [섹션 8] 검색어
-- **검색 포화**: 각 seed query에서 Wing 추천·인기검색어, Coupang 자동완성, 관련검색 결과를 확인한다. 제품 핵심어와 실제 관련 있는 띄어쓰기·동의어 변형도 조사하고, 새롭고 적합한 고유어가 더 나오지 않을 때까지 확장한다. 모든 source family를 조사해도 20개에 못 미치면 부족 수와 blocker를 남기고 제출을 멈춘다. 근거 없는 filler는 금지한다.
-- **출처 형식**: `sources.json`은 `wingRecommended`, `wingPopular`, `coupangAutocomplete`, `coupangRelatedQueries`, `naverF12`의 실제 관측어 배열을 받는다. 상품 원문과 동일 용도 상품명은 query seed로만 쓰고, 실제 검색표면에 표시된 표현만 최종 후보로 전달한다.
-- **근거 기록**: `<workDir>\search_terms_evidence.json`에 각 확정 term, 출처, 실제 query, `<workDir>` 기준 근거 파일·캡처 경로, 상품과 맞는 이유를 기록한다. 개인정보와 URL 토큰은 넣지 않는다.
-- **입력값**: `coupang_build.json` 의 `searchTerms` = `plan.coupang.tags`. 목표는 고유 검색어 **20개**다. 중복을 제거하고 하나씩 입력(Enter)한다.
-- **근거 수집 순서**: Wing 추천 검색어, Wing 인기검색어 도구, 쿠팡 자동완성, 네이버 F12의 유효 terms/intersection 및 연관어, 원상품·메이커 카피의 실제 특징, 동일 용도의 쿠팡 검색결과 제목을 살펴 후보를 넓힌다. 상품과 정확히 맞고 출처가 남는 후보만 채택하며, 경쟁사 브랜드나 기능·규격을 대상 상품에 잘못 적용하지 않는다.
-- **최적화 완료 기준**: 1~2개 또는 초기 후보 수에서 멈추지 않는다. 모든 관련 source family와 준비한 핵심 query·변형을 조사한 뒤 20개의 서로 다른 관련 검색어를 채운다. 각 항목은 20자 이내이고 허용 특수문자만 쓴다. `sources.json`·`coupang_build.json`·`search_terms_evidence.json`에 실제 출처와 query를 남기고, 20개가 고유하며 상품 사실에 맞고 SEO BLOCK이 없어야 최종 확인 단계로 간다.
-- **검색어 부족**: 모든 근거 소스를 조사한 뒤에도 20개 미만이면 단어를 발명하지 말고 부족 수와 확인한 출처를 기록해 제출을 멈춘다. `TAG_COUNT_UNDER_TARGET` BLOCK을 해결할 때까지 추가 근거를 조사한다.
+- **입력값**: Wing 추천어와 원상품 사실에서 확인되는 관련 검색어를 가능한 만큼 입력한다. 20개는 최대치이지 최소 등록 수가 아니다.
+- **선택 근거**: 검색어가 상품의 실제 용도·기능과 맞는지 간단히 확인한다. 타브랜드·홍보어·무관어·중복어·상품에 없는 기능/재질/규격은 쓰지 않는다. 상세 query·캡처 provenance JSON 작성을 위한 장시간 조사는 하지 않는다.
+- **검색어 부족**: 20개 미만은 참고 WARN이며 등록을 막지 않는다. 검색어를 만들거나 부정확한 단어를 넣지 말고, 확보된 관련어만 사용한다.
 
 ## [섹션 9] 상품정보제공고시
 - **입력법**: 카테고리 품목군 선택 → 화면 자동 표시 항목을 채운다.

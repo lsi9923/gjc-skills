@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
-"""registration_plan.json(+ title_build/coupang 결과) → SKILL.md §4 마켓별 최종 확인표(마크다운).
+"""One or more registration plans → concise final confirmation table.
 
 표준 라이브러리만. 인터넷·브라우저 접근 없음. plan/빌더 결과 JSON 만 읽는다.
 
-SKILL.md §4 두 표를 생성:
-  (A) 키워드 판정표  = title_build.json judgeTable (키워드/판정/근거/상품명·태그 반영)
-  (B) 최종 확인표    = 카테고리, 상품명(글자수), 판매가/정상가, 옵션·재고, 대표/추가 이미지 수,
-      상세 이미지 수, 브랜드/제조사/원산지, 고시 요약, 배송·반품비, 태그/검색어,
-      키워드 판정표(요약), seo_audit WARN/BLOCK.
+F12/이호 분석을 요청한 경우에만 키워드 판정표를 추가한다. 기본 확인표에는 필수 6개 값,
+seller form/법률상 필수 필드, 가격 근거, 태그 개수/출처, Coupang top-3 후보와 최종 승인에
+필요한 값만 포함한다. 20개 미달이나 선택 SEO 필드는 blocker가 아니다.
 
 원칙:
 - 비어 있는 값은 '미확정' 으로 표시하고 발명하지 않는다.
-- seo_audit 는 plan 의 naver/coupang.productName 이 있을 때만 실제 검사 대상이 있다.
-  "seo_audit ok" 라도 상품명이 비어 있으면 '검사 대상 없음' 으로 명시한다(live_verify 7-3).
 - 근거 없는 수치·항목을 지어내지 않는다.
 
 사용
-  python build_confirm_table.py --plan registration_plan.json [--title-build title_build.json]
-        [--coupang coupang_build.json] [--out confirm.md]
+  python build_confirm_table.py --plan registration_plan_1.json --plan registration_plan_2.json
+        [--title-build title_build_1.json] [--coupang coupang_build_1.json] [--out confirm.md]
   python build_confirm_table.py --selftest
 """
 from __future__ import annotations
@@ -205,11 +201,42 @@ def final_table_md(plan, market, market_label, coupang_build=None):
             search_term_count = len(tags)
             tag_display = _val(tags)
 
+    category_candidates = m.get("categoryCandidates") or (
+        (m.get("categoryEvidence") or {}).get("candidates") or []
+    )
+    candidate_text = "; ".join(
+        f"{_md_escape(c.get('id') or c.get('code') or '')} {_md_escape(c.get('path') or '')}".strip()
+        for c in category_candidates[:3] if isinstance(c, dict)
+    ) or UNSET
+    price_source = (m.get("salePriceSource") or pricing.get("salePriceSource")
+                    or pricing.get("approvalSource")
+                    or (pricing.get("suggested") or {}).get("formula") or UNSET)
+    title_source = m.get("productNameSource") or m.get("evidenceSource") or UNSET
+    tags_source = m.get("tagsSource") or m.get("evidenceSource") or UNSET
     rows = [
         ("카테고리", _val(m.get("categoryPath"))),
         ("상품명", (f"{_md_escape(product_name)} ({nlen(product_name)}자)" if product_name else UNSET)),
+        ("상품명 출처", _val(title_source)),
         ("판매가", _num(sale)),
+        ("가격 근거", _val(price_source)),
     ]
+    if market == "coupang":
+        rows.insert(1, ("쿠팡 상위 추천 후보 1~3", candidate_text))
+        evidence = m.get("categoryEvidence") or {}
+        official = evidence.get("officialLookup") or {}
+        live = evidence.get("liveSelected") or {}
+        evidence_text = "; ".join(
+            part for part in (
+                f"방식={nfc(evidence.get('method'))}" if evidence.get("method") else "",
+                f"출처={nfc(evidence.get('fallbackSource'))}" if evidence.get("fallbackSource") else "",
+                f"출처참조={nfc(evidence.get('sourceRef'))}" if evidence.get("sourceRef") else "",
+                f"공식 말단={nfc(official.get('terminal'))}" if official else "",
+                f"활성={nfc(official.get('active'))}" if official else "",
+                f"live 선택={nfc(live.get('ok'))}" if live else "",
+                f"범위={nfc(evidence.get('comparisonScope'))}" if evidence.get("comparisonScope") else "",
+            ) if part
+        ) or UNSET
+        rows.insert(2, ("카테고리 검증 근거", evidence_text))
     if market == "coupang":
         rows.append(("정상가", _num(original)))
     if market == "naver" and m.get("existingItemId"):
@@ -221,10 +248,12 @@ def final_table_md(plan, market, market_label, coupang_build=None):
         ("옵션·재고", _md_escape(option_desc)),
         ("대표/추가 이미지 수", f"대표 {rep} / 추가 {add}" if thumbs else UNSET),
         ("상세 이미지 수", str(len(detail_imgs)) if detail_imgs else UNSET),
-        ("브랜드(제거)", _val(brand.get("removedFromMarketing")) + " → 상품명·태그에서 제거"),
+        ("브랜드", _val(brand.get("ownKept") or "끄롱마제")),
         ("제조사/수입자", _val(notice.get("제조자/수입자"))),
         ("원산지(제조국)", _val(notice.get("제조국"))),
         ("고시 요약", _md_escape(_notice_summary(notice))),
+        ("KIPRIS", "끄롱마제 자체 브랜드 조회 생략"),
+        ("상품명/태그 근거 출처", f"상품명: {_val(title_source)} / 태그: {_val(tags_source)}"),
     ]
     if market == "naver":
         rows.append(("배송·반품비", "택배 유료 3,500원 / 반품 3,500원·교환 7,000원(등록 화면 확인)"))
@@ -248,46 +277,42 @@ def final_table_md(plan, market, market_label, coupang_build=None):
             f"제주 추가 {jeju}·도서산간 추가 {remote_island} / {address_status}"
         ))
     if market == "coupang":
-        rows.append(("검색어 개수", f"{search_term_count}/20"))
+        rows.append(("검색어 개수", f"{search_term_count}/20 (최대; 미달은 WARN)"))
         filled_attributes = ((m.get("attributes") or {}).get("filled") or [])
+        required_attributes = [a for a in filled_attributes
+                               if a.get("required") is True or a.get("group") == "required"]
         applied_filter_values = "; ".join(
             f"{_md_escape(a.get('name'))}={_md_escape(a.get('value'))}"
-            for a in filled_attributes
+            for a in required_attributes
             if a.get("name") and a.get("value") is not None
         )
-        rows.append(("검색필터 적용값", applied_filter_values or UNSET))
-    rows.append(("태그/검색어", tag_display))
+        rows.append(("필수 속성", applied_filter_values or "화면에서 필수인 값만 확인"))
+    if market == "naver":
+        tag_count_display = f"{len(tags)}/10 (목표; 미달은 WARN)"
+    else:
+        tag_count_display = f"{len(tags)}/20 (최대; 미달은 WARN)"
+    rows.append(("태그/검색어", f"{tag_count_display} — {tag_display}"))
 
     lines = [f"#### (B) 최종 확인표 — {market_label}", "",
              "| 항목 | 값 |", "|---|---|"]
     for k, val in rows:
         lines.append(f"| {k} | {val} |")
 
-    # seo_audit
-    seo = plan.get("seoAudit") or plan.get("seo_audit") or {}
-    market_seo = seo.get(market) if isinstance(seo, dict) else None
-    head, detail = audit_summary(market_seo, product_name)
-    lines.append(f"| seo_audit | {_md_escape(head)} |")
-    lines.append("")
-    if head == NO_TARGET:
-        lines.append(f"> seo_audit: 상품명이 비어 있어 **{NO_TARGET}**. (ok 값이 있어도 실제 검사한 상품명이 없음 — live_verify 7-3)")
-    elif detail:
-        lines.append("seo_audit WARN/BLOCK:")
-        for d in detail:
-            lines.append(f"- {_md_escape(d)}")
-    elif head == UNSET:
-        lines.append(f"> seo_audit 결과가 plan 에 없습니다({UNSET}). `seo_audit.py --plan` 실행 후 반영하세요.")
-    else:
-        lines.append("seo_audit WARN/BLOCK: 없음")
     return "\n".join(lines) + "\n"
 
 
 def _notice_summary(notice):
     parts = []
-    for key in ("품명", "제조국", "제조자/수입자", "인증"):
+    for key, label in (
+        ("품명", "품명"),
+        ("제조국", "제조국"),
+        ("제조자/수입자", "제조자/수입자"),
+        ("인증", "인증"),
+        ("A/S 책임자·전화", "A/S 책임자와 전화번호"),
+    ):
         val = nfc(notice.get(key))
         if val:
-            parts.append(f"{key}={val}")
+            parts.append(f"{label}={val}")
     return " / ".join(parts) if parts else UNSET
 
 
@@ -303,42 +328,67 @@ def _markets_present(plan, requested):
     return out or [mk for mk in ("naver", "coupang") if mk in plan]
 
 
-def build(plan, title_build=None, coupang_build=None, markets=None):
-    title_build = title_build or {}
-    judgements = title_build.get("judgeTable") or plan.get("naver", {}).get("keywordJudgements") or []
-    label = {"naver": "네이버 스마트스토어", "coupang": "쿠팡 윙"}
-    present = _markets_present(plan, markets)
+def _missing_essentials(plan, markets):
+    missing = []
+    images = plan.get("images", {}) or {}
+    files = images.get("files", {}) or {}
+    has_thumb = bool(files.get("thumbs"))
+    for market in markets:
+        values = plan.get(market, {}) or {}
+        label = "네이버" if market == "naver" else "쿠팡"
+        if not nfc(values.get("productName")):
+            missing.append(f"{label}: 상품명 미확정")
+        if not nfc(values.get("categoryPath")):
+            missing.append(f"{label}: 카테고리 미확정")
+        if values.get("salePrice") in (None, ""):
+            missing.append(f"{label}: 판매가 미확정")
+        if not has_thumb:
+            missing.append(f"{label}: 대표 이미지 없음")
+        detail_key = "detailEditor" if market == "naver" else "detailContents"
+        if not (images.get(market, {}) or {}).get(detail_key):
+            missing.append(f"{label}: 상세페이지 없음")
+    return missing
 
-    out = ["# 마켓별 최종 확인표", "",
-           f"- 생성 대상 폴더: {_val(plan.get('productFolder'))}",
-           f"- 작업 폴더: {_val(plan.get('workDir'))}",
-           "- 값이 비면 '미확정'으로 표기했고, 없는 값을 지어내지 않았습니다.",
-           "- Naver `저장하기`/Coupang `상품등록` 은 사용자 최종 확인 후에만.", ""]
 
-    # blockers/needsUser 알림
-    blockers = plan.get("blockers") or []
-    needs_user = plan.get("needsUser") or []
-    if blockers:
-        out.append("> **BLOCKERS (등록 전 해결 필요):**")
-        for b in blockers:
-            out.append(f"> - {_md_escape(b)}")
-        out.append("")
-    if needs_user:
-        out.append("> **사용자 확인 필요:**")
-        for n in needs_user:
-            out.append(f"> - {_md_escape(n)}")
-        out.append("")
+def build_many(plans, title_builds=None, coupang_builds=None, markets=None):
+    labels = {"naver": "네이버 스마트스토어", "coupang": "쿠팡 윙"}
+    title_builds = title_builds or []
+    coupang_builds = coupang_builds or []
+    out = ["# 등록 전 통합 확인표", "",
+           "- 최종 제출은 아래 확인표의 명시적 사용자 승인 후에만 실행합니다.",
+           "- 확인표 승인 뒤 값이 바뀌면 변경분을 다시 보여주고 재승인받습니다.", ""]
 
-    for mk in present:
-        out.append(f"## {label.get(mk, mk)}")
-        out.append("")
-        # 판정표는 네이버 기준(쿠팡도 네이버 F12 판정 근거를 공유)
-        out.append(judge_table_md(judgements, label.get(mk, mk)))
-        out.append("")
-        cb = coupang_build if mk == "coupang" else None
-        out.append(final_table_md(plan, mk, label.get(mk, mk), coupang_build=cb))
-        out.append("")
+    for index, plan in enumerate(plans):
+        out.extend([f"## 상품 {index + 1}: {_val(plan.get('productFolder'))}", ""])
+        current_markets = _markets_present(plan, markets)
+        unresolved = []
+        for item in list(plan.get("blockers") or []) + _missing_essentials(plan, current_markets):
+            unresolved.append(("BLOCKER", item))
+        for item in plan.get("needsUser") or []:
+            unresolved.append(("필수 확인", item))
+        if unresolved:
+            out.append("> **제출 불가: 필수값을 먼저 해결해야 합니다.**")
+            out.extend(f"> - [{kind}] {_md_escape(value)}" for kind, value in unresolved)
+            out.append("")
+
+        title_build = title_builds[index] if index < len(title_builds) else {}
+        coupang_build = coupang_builds[index] if index < len(coupang_builds) else {}
+        for mk in _markets_present(plan, markets):
+            out.extend([f"### {labels.get(mk, mk)}", ""])
+            judgements = title_build.get("judgeTable") or plan.get("naver", {}).get("keywordJudgements") or []
+            if mk == "naver" and judgements:
+                out.append(judge_table_md(judgements, labels[mk]))
+                out.append("")
+            out.append(final_table_md(
+                plan, mk, labels.get(mk, mk),
+                coupang_build=coupang_build if mk == "coupang" else None,
+            ))
+            out.append("")
     return "\n".join(out).rstrip() + "\n"
+
+
+def build(plan, title_build=None, coupang_build=None, markets=None):
+    return build_many([plan], [title_build or {}], [coupang_build or {}], markets)
 
 
 # ---------------------------------------------------------------- selftest
@@ -347,17 +397,25 @@ def selftest():
     # 1) 채워진 plan → 값이 표에 반영, 미확정 최소
     plan_full = {
         "productFolder": r"C:\done\3", "workDir": r"C:\sess\reg-3",
-        "brand": {"removedFromMarketing": ["더이안"]},
-        "notice": {"품명": "무선청소기 YQ-669", "제조국": "중국", "제조자/수입자": "협력업체", "인증": ""},
+        "brand": {"removedFromMarketing": ["더이안"], "ownKept": ["끄롱마제"]},
+        "notice": {"품명": "무선청소기 YQ-669", "제조국": "중국", "제조자/수입자": "협력업체",
+                   "인증": "", "A/S 책임자·전화": "상세정보 참조"},
+        "pricing": {"salePriceSource": "사용자 제공 판매가"},
         "source": {"optionRows": [], "optionsText": ""},
         "images": {"files": {"thumbs": [{"path": "t1"}, {"path": "t2"}, {"path": "t3"}]},
                    "naver": {"detailEditor": ["d1"]},
                    "coupang": {"detailContents": ["s1", "s2"]}},
         "naver": {"categoryPath": "생활/건강>청소기", "productName": "무선청소기 핸디 차량용 청소기",
                   "tags": ["무선청소기", "핸디청소기"], "salePrice": 39800,
+                  "productNameSource": "maker_ui", "tagsSource": "maker_ui",
                   "keywordJudgements": []},
         "coupang": {"categoryPath": "청소기", "productName": "무선청소기 핸디 차량용",
                     "tags": [], "salePrice": 39800, "originalPrice": 59000,
+                    "categoryCandidates": [{"id": "111", "path": "생활용품>청소용품>청소기"}],
+                    "categoryEvidence": {"method": "bounded_fallback", "fallbackSource": "own_listing",
+                                         "sourceRef": "기존상품-1", "officialLookup": {"terminal": True, "active": True},
+                                         "liveSelected": {"ok": True}, "comparisonScope": "bounded_fallback"},
+                    "tagsSource": "wing_recommendations_and_product_facts",
                     "attributes": {"filled": [{"name": "색상", "value": "화이트"}]}},
         "seoAudit": {
             "naver": {"ok": True, "block": 0, "warn": 1, "violations": [
@@ -374,23 +432,21 @@ def selftest():
     cb = {"exposureName": "무선청소기 핸디 차량용", "searchTermCount": 20,
           "searchTerms": [{"term": f"검색어{i}", "source": "쿠팡 자동완성"} for i in range(20)]}
     md = build(plan_full, title_build=tb, coupang_build=cb)
-    assert "# 마켓별 최종 확인표" in md
+    assert "# 등록 전 통합 확인표" in md
     assert "네이버 스마트스토어" in md and "쿠팡 윙" in md
     assert "무선청소기 핸디 차량용 청소기" in md
-    assert "39,800원" in md and "59,000원" in md  # 쿠팡 정상가
-    assert "완성형" in md and "미적용" in md
-    assert "20/20" in md
-    assert "쿠팡 자동완성" in md and "화이트" in md
-    # 네이버 seo_audit WARN 이 표시
-    assert "DUPLICATE_TOKEN" in md
-    # 대표/추가 이미지 수
+    assert "39,800원" in md
     assert "대표 1 / 추가 2" in md
-    # 상세 이미지 수(네이버 1, 쿠팡 2)
-    assert "상세 이미지 수" in md
-    # 검사 대상 없음이 아닌 실제 요약
-    assert NO_TARGET not in md.split("네이버 스마트스토어")[1].split("쿠팡 윙")[0]
+    assert "| 상세 이미지 수 | 1 |" in md and "| 상세 이미지 수 | 2 |" in md
+    assert "검색어0" in md
+    assert "seoAudit" not in md and "DUPLICATE_TOKEN" not in md
+    assert "KIPRIS" in md and "가격 근거" in md
+    assert "111 생활용품>청소용품>청소기" in md
+    assert "출처=own_listing" in md and "live 선택=True" in md
+    assert "사용자 제공 판매가" in md
+    assert "A/S 책임자와 전화번호=상세정보 참조" in md
 
-    # 2) 상품명 비어 있는데 seo_audit ok=True → '검사 대상 없음' (live_verify 7-3)
+    # 2) Unfilled essential values remain visible; optional SEO audit is omitted.
     plan_empty = {
         "productFolder": "f", "workDir": "w",
         "brand": {"removedFromMarketing": []}, "notice": {},
@@ -398,23 +454,24 @@ def selftest():
         "naver": {"categoryPath": "", "productName": "", "tags": [], "salePrice": None,
                   "keywordJudgements": []},
         "coupang": {"productName": "", "tags": [], "salePrice": None, "originalPrice": None},
-        "seoAudit": {"coupang": {"ok": False, "block": 1, "warn": 0, "violations": [
-            {"field": "coupang.tags", "severity": "BLOCK", "rule": "TAG_COUNT_UNDER_TARGET",
+        "seoAudit": {"coupang": {"ok": True, "block": 0, "warn": 1, "violations": [
+            {"field": "coupang.tags", "severity": "WARN", "rule": "TAG_COUNT_UNDER_TARGET",
              "message": "검색어 0/20개", "evidence": ""}]}},
     }
     md2 = build(plan_empty)
-    assert NO_TARGET in md2, md2
-    # 상품명 미확정 표기
     assert UNSET in md2
-    # ok=True 여도 검사대상없음 문구가 뜬다(제목 검사 안 됨)
-    assert "실제 검사한 상품명이 없음" in md2, md2
+    assert "TAG_COUNT_UNDER_TARGET" not in md2
+    assert "판매가 | 미확정" in md2
 
     # 3) 판정표 없음 → 판정불가/없음 안내, 발명 안 함
     plan_min = {"naver": {"productName": "테스트상품명"}, "brand": {}, "notice": {},
                 "source": {}, "images": {"files": {}}}
     md3 = build(plan_min, markets=["naver"])
-    assert "판정불가" in md3 or UNSET in md3
+    assert UNSET in md3
     assert "쿠팡" not in md3  # markets=naver 만
+    md_many = build_many([plan_full, plan_empty])
+    assert "상품 1:" in md_many and "상품 2:" in md_many
+    assert "TAG_COUNT_UNDER_TARGET" not in md_many
 
     print(json.dumps({"selftest": "PASS"}, ensure_ascii=False))
 
@@ -424,9 +481,9 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser(
         description="registration_plan.json → SKILL.md §4 마켓별 최종 확인표(마크다운).")
-    ap.add_argument("--plan", help="registration_plan.json")
-    ap.add_argument("--title-build", help="naver_title_builder.py 출력 JSON")
-    ap.add_argument("--coupang", help="coupang_helper.py 출력 JSON")
+    ap.add_argument("--plan", action="append", help="registration_plan.json (repeat for multiple products)")
+    ap.add_argument("--title-build", action="append", help="naver_title_builder.py 출력 JSON, plan order")
+    ap.add_argument("--coupang", action="append", help="coupang_helper.py 출력 JSON, plan order")
     ap.add_argument("--markets", help="쉼표구분: naver,coupang (기본: plan 에 있는 것)")
     ap.add_argument("--out", help="결과 마크다운 저장 경로")
     ap.add_argument("--selftest", action="store_true")
@@ -438,12 +495,14 @@ def main():
 
     if not a.plan:
         ap.error("--plan 이 필요합니다")
-    plan = _load(a.plan)
-    if not plan:
-        ap.error(f"plan 로드 실패: {a.plan}")
+    plans = [_load(path) for path in a.plan]
+    if any(not plan for plan in plans):
+        ap.error("등록 계획 중 로드에 실패한 파일이 있습니다")
     markets = [m.strip() for m in a.markets.split(",")] if a.markets else None
 
-    md = build(plan, title_build=_load(a.title_build), coupang_build=_load(a.coupang), markets=markets)
+    title_builds = [_load(path) for path in (a.title_build or [])]
+    coupang_builds = [_load(path) for path in (a.coupang or [])]
+    md = build_many(plans, title_builds=title_builds, coupang_builds=coupang_builds, markets=markets)
     if a.out:
         Path(a.out).write_text(md, encoding="utf-8")
     print(md)

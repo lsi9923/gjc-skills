@@ -5,8 +5,8 @@ skill_audit 권고 반영:
 - 구버전 coupang_title_composer / coupang_tags_generator 의 '하드코딩 태그풀·카테고리 프리셋·
   F자패턴 전면배치'는 이식 금지(근거 없는 채우기).
 - 살릴 개념만 이식: (1) 옵션값(색상·수량) 제거, (2) 색상 쿠팡 표준명 정규화,
-  (3) 근거 있는 키워드로만 검색어 후보 구성. 이 도구는 후보 조립기이며, 20개 미만이면
-  후속 SEO audit가 BLOCK 하므로 추가 근거를 수집해야 한다.
+    (3) 확인된 상품 사실과 실제 Wing 추천어로 검색어 후보 구성. 20개는 최대치이며
+  부족은 선택 최적화다. 플랫폼 입력 한도와 금지어는 별도 검사한다.
 
 입력 = 근거 있는 키워드 소스들. 아무 근거 없이 슬롯을 지어내지 않는다.
   --name "정제된 제품명"             (필수, prepare_product.cleanedName 사용 권장)
@@ -30,6 +30,7 @@ import re
 import sys
 import unicodedata
 from pathlib import Path
+from typing import Any
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
     try:
@@ -72,16 +73,17 @@ def nlen(s):
 
 
 def clean_exposure_name(name, brand_removed):
-    """쿠팡 노출상품명: 옵션값(색상·수량) 제거 + 브랜드 제거 + 공백 정리. 100자 이내."""
+    """쿠팡 노출상품명: 옵션값·제3자 브랜드 제거, 자체 브랜드를 맨 앞에 둔다."""
     name = nfc(name)
     if "," in name:
         segs = [s.strip() for s in name.split(",")]
         name = " ".join([segs[0]] + [s for s in segs[1:] if s and not OPTION_VALUE.search(s)])
     for b in brand_removed:
-        if b:
+        if b and b != "끄롱마제":
             name = re.sub(rf"(^|\s){re.escape(b)}(\s|$)", " ", name, flags=re.IGNORECASE)
+    name = re.sub(rf"(^|\s){re.escape('끄롱마제')}(\s|$)", " ", name).strip()
     name = re.sub(r"\s+", " ", name).strip()
-    return name
+    return f"끄롱마제 {name}".strip()
 
 
 def check_exposure_name(name):
@@ -95,6 +97,8 @@ def check_exposure_name(name):
         issues.append({"level": "block", "reason": f"노출상품명 {nlen(n)}자 - 100자 초과(잘림)"})
     if not n:
         issues.append({"level": "block", "reason": "노출상품명이 비어 있음"})
+    elif n == "끄롱마제":
+        issues.append({"level": "block", "reason": "자체 브랜드만 있고 실제 상품명이 없습니다"})
     hit = sorted({b for b in EXPOSURE_BANNED if b in n})
     if hit:
         issues.append({"level": "warn", "reason": f"홍보/과장 금지어 포함: {hit}"})
@@ -105,7 +109,7 @@ def build_search_terms(sourced, name, brand_removed, limit=20):
     """근거 있는 키워드로 검색어 슬롯 채우기(소스 우선순위·출처 표시).
 
     sourced = [(keyword, source_key), ...]  이미 우선순위 순으로 정렬돼 들어온다.
-    근거가 부족하면 후보를 20개 미만 반환하며, seo_audit.py가 제출을 BLOCK한다. 중복은 높은 소스만 남긴다.
+    후보가 부족하면 20개 미만을 그대로 반환한다. 제출 게이트가 아니며 중복은 높은 소스만 남긴다.
     """
     brand_removed_l = [b.lower() for b in brand_removed if b]
     name_c = re.sub(r"\s+", "", nfc(name)).lower()
@@ -125,6 +129,10 @@ def build_search_terms(sourced, name, brand_removed, limit=20):
         if any(b in kw.lower() for b in brand_removed_l):
             excluded.append({"word": kw, "source": SOURCE_LABEL.get(src, src),
                              "reason": "제거 대상 브랜드/판매자명"})
+            continue
+        if "끄롱마제" in kw:
+            excluded.append({"word": kw, "source": SOURCE_LABEL.get(src, src),
+                             "reason": "자체 브랜드는 검색어가 아니라 브랜드 필드에 입력"})
             continue
         if nlen(kw) > 20:
             excluded.append({"word": kw, "source": SOURCE_LABEL.get(src, src),
@@ -182,13 +190,13 @@ def run(name, sourced, brand_removed):
     exposure = exposure_full[:100]  # 화면 입력용은 100자로 자름(이슈는 위에서 이미 기록)
     terms, excluded = build_search_terms(sourced, exposure, brand_removed)
     notes = [
-        "검색어는 근거 있는 고유 키워드 20개가 제출 전 완료 기준이다. 부족하면 출처 조사를 계속하고 지어내지 않는다.",
-        "소스 우선순위: 윙 추천 > 윙 인기검색어 > 쿠팡 자동완성 > 쿠팡 관련검색어 > 네이버 F12 > 직접 입력 > title_builder. 각 검색어에 출처 표시.",
+        "검색어 20개는 최대치이며 미달은 경고다. 확인된 상품 사실과 Wing 추천어를 우선 사용하고 근거 없는 검색어를 만들지 않는다.",
+        "소스 우선순위: Wing 추천/인기 > Coupang 자동완성/관련검색 > 확인된 상품 사실 > 선택적 Maker/Naver 후보. 출처는 후보 정보로 보존한다.",
         "F자패턴·하드코딩 태그풀은 이식하지 않음(skill_audit 권고). 색상은 쿠팡 표준명 사용.",
-        "노출상품명은 옵션값(색상·수량) 제외. 브랜드칸은 '브랜드 없음' 처리(상품명은 제품명 중심).",
+        "노출상품명은 끄롱마제로 시작하며 옵션값(색상·수량)은 제외한다. 브랜드 필드도 끄롱마제다.",
     ]
     if len(terms) < 20:
-        notes.append(f"검색어 {len(terms)}/20 - 미완료 후보 상태이며 seo_audit.py가 제출을 BLOCK함. 추가 근거 수집 필요.")
+        notes.append(f"검색어 {len(terms)}/20 - 최대치 미달 참고 경고(추가 조사는 선택).")
     # 소스별 채택 수 요약
     by_source = {}
     for t in terms:
@@ -202,24 +210,25 @@ def run(name, sourced, brand_removed):
 
 def selftest():
     # 하위호환: --keywords 만 준 경우도 동작
-    sourced = merge_sources({"keywords": ["무선청소기", "핸디청소기", "차량용청소기",
-                                          "최저가", "더이안청소기", "무선청소기"]})
-    r = run("2in1 에어슬림 무선청소기 YQ-669, 화이트, 1개", sourced, ["더이안"])
-    assert r["exposureName"] == "2in1 에어슬림 무선청소기 YQ-669", r["exposureName"]
-    tset = {t["term"] for t in r["searchTerms"]}
+    sourced: list[tuple[str, str]] = merge_sources(
+        {"keywords": ["무선청소기", "핸디청소기", "차량용청소기", "최저가", "더이안청소기", "무선청소기"]}
+    )
+    r: dict[str, Any] = run("2in1 에어슬림 무선청소기 YQ-669, 화이트, 1개", sourced, ["더이안"])
+    assert r["exposureName"] == "끄롱마제 2in1 에어슬림 무선청소기 YQ-669", r["exposureName"]
+    tset: set[str] = {t["term"] for t in r["searchTerms"]}
     assert "무선청소기" in tset and "핸디청소기" in tset, tset
     assert "최저가" not in tset, r  # 홍보성 제외
     assert not any("더이안" in t for t in tset), r  # 브랜드 제외
     assert r["searchTermCount"] == 3, r  # 중복/홍보/브랜드 제거 후 3개
-    ex = {e["word"] for e in r["excluded"]}
+    ex: set[str] = {e["word"] for e in r["excluded"]}
     assert "최저가" in ex, r["excluded"]
 
     # 소스 우선순위: 같은 단어면 높은 소스로 귀속, 출처 표시
-    s2 = merge_sources({"wingRecommended": ["신발정리대"],
+    s2: list[tuple[str, str]] = merge_sources({"wingRecommended": ["신발정리대"],
                         "coupangAutocomplete": ["신발정리대", "현관정리대"],
                         "coupangRelatedQueries": ["현관정리대", "신발장정리대"], "naverF12": ["실내화정리대"]})
-    r2 = run("신발정리대 3단", s2, [])
-    by = {t["term"]: t["source"] for t in r2["searchTerms"]}
+    r2: dict[str, Any] = run("끄롱마제 신발정리대 3단", s2, [])
+    by: dict[str, str] = {t["term"]: t["source"] for t in r2["searchTerms"]}
     assert by["신발정리대"] == "윙 추천 검색어", by
     assert by["현관정리대"] == "쿠팡 자동완성", by
     assert by["신발장정리대"] == "쿠팡 관련검색어" and by["실내화정리대"] == "네이버 F12 근거", by

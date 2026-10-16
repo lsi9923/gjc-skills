@@ -18,7 +18,7 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
 ## 3. 네이버 스마트스토어·쿠팡 윙 상품 등록 및 구매대행 정리 (`naver-coupang-register` 외)
 사용자가 "네이버 쿠팡 등록해", "네이버 등록해줘", "쿠팡 등록해줘", "스마트스토어 등록", "윙 등록", "완료된폴더 N번 등록", "상품명 텀스", "이호 방식 상품명", "구매대행 정리/등록" 등을 지시하면 더미 JSON이나 단순 복붙용 텍스트만 던지고 끝내지 않고, 아래 등록 스킬 체계를 즉시 로드하여 실행한다:
 - **통합 실전 등록 스킬 (`naver-coupang-register`)**: `C:/Users/imda0/.gjc/agent/skills/naver-coupang-register/SKILL.md`
-  - 상세페이지 메이커 완료폴더(`C:\Users\imda0\Downloads\완료된폴더\<N>`) 기반 `prepare_product.py` → 네이버 F12(`naver_f12_capture.js` / `naver_search_extract.js` / `maker_helper_extract.js`) → 카테고리 말단 확정(`naver_category_pick.py`) → 이호 5분류 상품명·태그 조립(`naver_title_builder.py`) → 쿠팡 노출상품명·검색어·카테고리(`coupang_helper.py` / `coupang_category_pick.py`) → 플랜 병합 및 SEO 감사(`apply_to_plan.py --run-audit` / `seo_audit.py`) → 최종 확인표 생성(`build_confirm_table.py`) → 판매자센터/윙 등록 화면 입력. (최종 Naver `저장하기`/Wing 화면상 제출 버튼—현재 `상품등록`—은 반드시 사용자 최종 확인 후 실행)
+  - 기본은 Maker `maker_ui.json`에서 네이버 키워드 칩·카테고리·태그 10개를 읽고, 상품명은 원상품 사실과 칩으로 조립한다. Wing 실시간 카테고리 추천 상위 1~3개 중 선택 가능한 말단 ID를 고른 뒤 필수값을 판매자 화면에 입력한다. F12 terms 분석, 전체 taxonomy 수집, 20개 쿠팡 검색어, 전체 SEO JSON 감사는 요청되지 않으면 실행하지 않는다. 최종 확인표 승인 후 제출한다.
 - **네이버 레거시·참고 스킬 (통합 등록에서 독립 실행하지 않음)**:
   - `C:/Users/imda0/.gjc/agent/skills/naver-seo-sudong-skill/SKILL.md`
   - `C:/Users/imda0/.gjc/agent/skills/naver-shopping-listing/SKILL.md`
@@ -31,19 +31,20 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
 ### 통합 등록 실행 규칙
 - 네이버·쿠팡을 함께 또는 각각 등록할 때 `naver-coupang-register`가 유일한 실행 절차다. `naver-seo-sudong-skill`과 `coupang-sudong-skill`은 이 절차와 충돌하지 않는 참고자료로만 읽고 독립 등록 흐름으로 실행하지 않는다.
 - 항상 기존 상품·원본 이미지·사용자가 이미 제공한 작업법을 먼저 확인하고, 근거 수집부터 실제 판매자 화면 입력·최종 승인·실제 제출·공개 판매상태 확인·Argo 기록까지 완료한다. 임시저장이나 확인표 작성만으로 종료하지 않는다.
-- 요청한 각 마켓의 검색면을 포화 조사한다. 네이버는 F12 `terms`/`intersectionTerms`, 연관검색어, 비광고 상품 제목·태그를 조사한다. 쿠팡은 Wing 추천·인기검색어, 쿠팡 자동완성·관련검색어를 여러 핵심 쿼리와 띄어쓰기 변형으로 조사한다. 현재 입력 한도까지 상품과 맞는 고유어만 채우고, 검색어마다 실제 출처·쿼리·근거 경로·적합 이유를 기록한다. 다른 마켓의 검색 결과는 해당 마켓에서 재확인하기 전까지 후보일 뿐이다.
-- 쿠팡은 20개 한도, 네이버는 현재 입력 한도(통상 10개 태그)를 기준으로 근거 있는 검색어를 최대한 채운다. 모든 관련 출처와 쿼리를 다 조사하기 전에는 부족하다고 결론 내리지 않는다. 출처를 모두 조사해도 한도에 못 미치면 부족 수와 차단·부재 근거를 기록하고 제출을 막는다. 무관어·중복어·관측되지 않은 조합어를 만들어 채우지 않는다.
-- 필수 판매자 필드와 확인표에는 설명 없는 공란을 두지 않는다. 원상품·기존 상품·공식 자료·판매자 설정을 끝까지 확인하고, 필수값이 여전히 없으면 정확한 BLOCKER로 제출을 중단한다. 근거가 없는 선택 항목은 빈칸 대신 `미확정: 사유`로 표시하되 값을 발명하지 않는다.
-- Wing 검색필터의 `AI로 검색필터 채우기`를 실행하고 모든 적용값을 원상품 근거와 대조한다. 자동 입력값은 기본 신뢰하지 않으며, 재진입 후에도 필터와 검색어가 저장됐는지 확인한다. 검색어가 20개 미만이면 `TAG_COUNT_UNDER_TARGET` BLOCK을 해결하기 전 제출하지 않는다.
-- 쿠팡 카테고리를 고르기 전 전체 공식 Wing 분류표/API를 확보하고 출처·버전·날짜·행 수를 기록해 전체 후보를 비교한 뒤 live picker에서 말단을 확인한다.
+- 속도 우선 기본 경로: 네이버는 Maker Selling Helper의 실제 `maker_ui.json`에서 키워드 칩·카테고리 후보·태그를 읽고, 상품명은 원상품 사실과 관측 칩으로 작성한다. 태그 10개를 목표로 한다. F12 `terms`/`intersectionTerms` 패킷 수집은 사용자가 명시적으로 요청하지 않는 한 하지 않는다. Maker JSON은 실제 캡처·상품 query·세션만 확인하고 전체 스키마·검색량·선택 탭 감사를 등록에 요구하지 않는다.
+- 쿠팡 카테고리는 Wing 실시간 카테고리 검색창의 상위 1~3개 추천 중 상품 용도에 맞는 선택 가능 말단 ID를 고른다. 맞는 후보가 없으면 검색어를 한 번 좁혀 재검색한 뒤, 동일상품의 기존 seller listing ID → 이미 기록된 공식 말단 ID → 정확히 일치하는 원상품의 공개 Coupang 경로 순으로 제한적으로 찾는다. 후보마다 공식 분류 트리 1회 조회 또는 공식 조회 1회로 말단·활성·용도를 확인하고 live form에서 선택한다. 전체 taxonomy/API 또는 약 5.5만 행 비교는 하지 않는다. 후보가 없으면 Coupang만 중단하고 다른 마켓은 계속한다. 후보가 충돌하면 확인표에 경로를 함께 표시해 사용자가 선택한다.
+- 태그는 네이버 10개를 목표로 Maker 결과와 원상품의 확인된 표현에서 중복 없이 채운다. 쿠팡 검색어는 현재 화면의 추천어와 상품 사실에서 바로 채울 수 있는 만큼 사용하며, 20개 미달·검색면 포화 조사·term별 provenance JSON은 제출 blocker가 아니다. 무관어·타브랜드·상품에 없는 기능이나 규격을 만들어 넣지 않는다.
+- 등록 완료 필수값은 상품명, 선택된 카테고리, 판매가격, 실제 상품 이미지, 상세페이지, 관련 태그다. 확인표는 이 필드와 판매자 화면이 실제로 요구하는 필수 입력만 간단히 보여준다. 선택 필드의 빈 JSON, 검색량, exhaustive audit, 20개 검색어는 제출 blocker로 승격하지 않는다. 다만 실제 제출 화면에서 필수로 표시되거나 법규상 필요한 값을 확인할 수 없으면 그 항목만 정확히 중단 사유로 남긴다.
+- Wing의 `AI로 검색필터 채우기`는 보이면 실행할 수 있지만 선택 기능이다. 실제 카테고리 필수 속성만 상품 사실과 대조하고, 선택 필터의 전체 검수·재진입 감사는 완료 조건이 아니다.
+- 요청된 여러 상품은 준비를 연속으로 진행하고 한 번에 간결한 통합 확인표로 묶는다. 각 상품의 필수값과 충돌을 모두 표시하고 사용자가 해당 목록을 승인한 뒤 실제 제출을 순차 진행한다. 확인표 승인 전 최종 제출은 하지 않는다.
 
-## 4. 키프리스(KIPRIS) 상표권 공식 직접 검색 절대 준수 (네이버 검색 절대 금지)
+## 4. 제3자 상표의 KIPRIS 공식 확인 (포털 검색 대체 금지)
 - 해외구매대행 및 사입 소싱, 스마트스토어·쿠팡 상품 등록 시 상표권 검증은 **포털(네이버/다음/구글 등) 검색으로 절대 때우지 않는다**.
-- 반드시 **특허청 특허정보검색서비스(KIPRIS) 공식 웹사이트(`www.kipris.or.kr`) 및 상표(TM) 데이터베이스에 직접 접속하여 상표 출원·등록 여부, 출원인, 상품분류(류)를 확인**한다.
+- 자체 브랜드 `끄롱마제`는 등록 중 KIPRIS 조회를 생략한다. 그 외 제3자·경쟁 브랜드 표장은 **특허청 특허정보검색서비스(KIPRIS) 공식 웹사이트(`www.kipris.or.kr`) 및 상표(TM) 데이터베이스에서 출원·등록 여부, 출원인, 상품분류(류)를 확인**한다.
 - 엑셀, 리포트, 등록 플랜에 들어가는 상표권 조회 링크는 반드시 KIPRIS 공식 상표 직결 URL이어야 한다:
   - `http://www.kipris.or.kr/khome/search/searchResult.do?searchKind=totalSearch&searchRight=trademark&queryText=<키워드>&queryTextTop=<키워드>&expression=<키워드>`
 - CLI 및 자동 스크립트 실행 시 KIPRIS 공식 상표 조회 도구를 활용한다:
-  - `python C:/Users/imda0/.gjc/agent/skills/korean-patent-search/scripts/trademark_search.py --query <브랜드명>`
+  - `python C:/Users/imda0/.gjc/agent/skills/korean-patent-search/scripts/trademark_search.py --query <제3자 표장>`
 
 ## 5. 상품 텍스트 검색 실패 시 이미지 추출 & 비전 딥 리서치(Deep Research) 의무 실행
 - 해외구매대행·사입 상품을 긁어오거나 소싱처/알리/타오바오/1688에서 상품 정보를 가져올 때, **상품명(이름)이나 텍스트 키워드로 검색되지 않거나 불명확할 경우 "상품을 찾을 수 없습니다"로 작업을 포기하거나 누락하지 않는다**.
@@ -67,3 +68,12 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
   ```bash
   python C:/Users/imda0/.gjc/agent/skills/sync_skills_to_git.py
   ```
+  
+## 7. NotebookLM 자동화 워크플로우 (노트북엘엠 / 노트북lm)
+- 사용자가 "노트북엘엠", "노트북 엘엠", "노트북lm", "노트북 lm", "노트북 LM", "노트북LM", "notebook lm", "NotebookLM", "노트북엘앰", "노트북 엘앰" 등 띄어쓰기 여부와 무관하게 언급하며 자료 분석, 요약, 리서치, 팟캐스트, 영상, 퀴즈, 마인드맵 제작 등 작업을 지시하면 설명으로 빠지지 않고 즉시 `notebooklm` 도구/스킬/CLI를 가동하여 원스톱 자율 실행한다.
+- **실행 절차**:
+  1) `notebooklm auth check --json` 상태 확인 (미인증 시 `notebooklm login` 자동 호출)
+  2) 작업별 전용 노트북 생성 (`notebooklm create "<주제명>"`) 및 선택
+  3) 소스 자료(URL/PDF/유튜브/텍스트) 추가 (`notebooklm source add <자료경로>`) 또는 웹/드라이브 딥 리서치 (`notebooklm source add-research "<주제>" --mode deep --import-all`)
+  4) 출처 기반 질의응답(`ask`) 또는 아티팩트 생성(`generate audio/video/quiz/flashcards/mind-map/slide-deck/report`)
+  5) 생성물 로컬 파일 다운로드(`notebooklm download <종류> <경로>`) 및 사용자 인도 완료

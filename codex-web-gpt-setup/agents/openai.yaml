@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Web GPT · 에이전트 설정"
+  short_description: "Windows CMD에서 Codex·omo·GJC 에이전트 설정과 연결 검증"
+  default_prompt: "Use $codex-web-gpt-setup to configure GPT-6 High for Codex, omo, and GJC agents and verify real responses."

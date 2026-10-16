@@ -71,17 +71,6 @@ def _match_product_links(product_name, link_rows):
     return {**best, "matched_name": best["name"], "match_score": score}
 
 
-def _purchase_link_label(url):
-    host = urlparse(url).netloc.casefold()
-    if "coupang.com" in host:
-        return "쿠팡 상품 열기"
-    if "naver.com" in host:
-        return "네이버 원본상품 열기"
-    if url:
-        return "원본 판매처 열기"
-    return "원본 링크 미확인"
-
-
 def append_selling_points_sheet():
     with open(JSON_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -111,7 +100,7 @@ def append_selling_points_sheet():
 
     headers = [
         "순번", "추천 순위", "상품명", "카테고리",
-        "🛒 원본 상품/쿠팡 링크 (클릭)", "🇨🇳 1688 상품 상세페이지 (직접 오퍼)", "🔍 네이버 가격비교 (클릭)",
+        "🛒 쿠팡 상품 URL (클릭)", "🇨🇳 1688 오퍼 URL (클릭)", "🔍 네이버 가격비교 URL (클릭)",
         "근거 신뢰도",
         "킬러 메인 헤드라인 (클릭 유발)", "서브 설명 카피 (실질 혜택)",
         "📋 원클릭 마케팅 기획 종합본 (복사용)",
@@ -196,9 +185,9 @@ def append_selling_points_sheet():
             f"{idx}위",
             p_name,
             cat_val,
-            _purchase_link_label(links.get("coupang", "")),
-            "1688 상품상세 열기" if links.get("1688") else "직접 상품 확인 안 됨",
-            "네이버 가격비교 열기" if links.get("naver") else "네이버 링크 미확인",
+            links.get("coupang") or "원본 링크 미확인",
+            links.get("1688") or "직접 상품 확인 안 됨",
+            links.get("naver") or "네이버 링크 미확인",
             p.get("evidence_confidence", "보통"),
             hl,
             p.get("sub_copy", ""),
@@ -242,9 +231,9 @@ def append_selling_points_sheet():
     ws.column_dimensions["B"].width = 11
     ws.column_dimensions["C"].width = 30
     ws.column_dimensions["D"].width = 14
-    ws.column_dimensions["E"].width = 23
-    ws.column_dimensions["F"].width = 24
-    ws.column_dimensions["G"].width = 24
+    ws.column_dimensions["E"].width = 42
+    ws.column_dimensions["F"].width = 48
+    ws.column_dimensions["G"].width = 48
     ws.column_dimensions["H"].width = 14
     ws.column_dimensions["I"].width = 32
     ws.column_dimensions["J"].width = 34

@@ -49,6 +49,8 @@ ATTENTION = re.compile(r"[^\w\s\-_./()%+&,]", re.UNICODE)
 CONTROL = re.compile(r"[\u0000-\u001f\u007f-\u009f\u00a0\u1680\u2000-\u200f\u2028\u2029\u202f\u205f\u3000\ufeff]")
 CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]")
 COUPANG_TAG_ALLOWED = re.compile(r"^[0-9A-Za-z가-힣ㄱ-ㅎㅏ-ㅣ\s!@#$%^&*\-+;:'.]+$")
+OWN_BRAND = "끄롱마제"
+CLAIM_NEEDS_FACT = ("안전", "수동", "무독성", "방지", "인증", "특허")
 
 
 def nlen(s: str) -> int:
@@ -88,8 +90,9 @@ def audit_title_common(field, title, brand_removed):
     out += _phrases(field, title, PROMOTIONAL, "BLOCK", "PROMOTIONAL_PHRASE", "홍보·혜택·배송 문구는 상품명에 넣을 수 없습니다")
     out += _phrases(field, title, OPTION_UMBRELLA, "BLOCK", "OPTION_UMBRELLA", "옵션 포괄 표현은 상품명에 넣을 수 없습니다")
     out += _phrases(field, title, FILLER, "WARN", "UNSUPPORTED_FILLER", "원상품 근거 없는 수식어입니다. 근거가 없으면 제거하세요")
-    if PHONE.search(title):
-        out.append(v(field, "BLOCK", "PHONE_IN_NAME", "전화번호는 상품명에 넣을 수 없습니다", PHONE.search(title).group(0)))
+    phone_match = PHONE.search(title)
+    if phone_match:
+        out.append(v(field, "BLOCK", "PHONE_IN_NAME", "전화번호는 상품명에 넣을 수 없습니다", phone_match.group(0)))
     att = ATTENTION.findall(title)
     if len(att) > 2:
         out.append(v(field, "BLOCK", "EXCESSIVE_SPECIAL_CHARS", "주목용 특수문자 과다", " ".join(sorted(set(att)))))
@@ -109,6 +112,12 @@ def audit_title_common(field, title, brand_removed):
 
 def audit_naver(title, tags, brand_removed):
     out = audit_title_common("naver.productName", title, brand_removed)
+    normalized_title = title.strip()
+    if normalized_title and not (normalized_title == OWN_BRAND or normalized_title.startswith(OWN_BRAND + " ")):
+        out.append(v("naver.productName", "BLOCK", "BRAND_NOT_HEAD", "상품명은 끄롱마제로 시작해야 합니다"))
+    if any(term in title for term in CLAIM_NEEDS_FACT):
+        out.append(v("naver.productName", "WARN", "CLAIM_NEEDS_FACT",
+                     "안전·기능·인증 표현은 원상품 근거를 확인하세요"))
     n = nlen(title)
     if n and not (25 <= n <= 35):
         out.append(v("naver.productName", "INFO", "IHO_LENGTH_WINDOW",
@@ -116,6 +125,9 @@ def audit_naver(title, tags, brand_removed):
     cleaned = [t.strip() for t in tags if t.strip()]
     if len(cleaned) > 10:
         out.append(v("naver.tags", "BLOCK", "TAG_COUNT_OVER_LIMIT", f"네이버 태그는 10개까지 ({len(cleaned)}개)"))
+    elif len(cleaned) < 10:
+        out.append(v("naver.tags", "WARN", "TAG_COUNT_UNDER_TARGET",
+                     f"네이버 태그 {len(cleaned)}/10개. Maker/원상품 사실에서 관련어를 보강하세요"))
     kept = cleaned[:10]
     total = sum(nlen(t) for t in kept)
     if total > 100:
@@ -138,12 +150,18 @@ def audit_naver(title, tags, brand_removed):
 
 def audit_coupang(title, tags, brand_removed):
     out = audit_title_common("coupang.productName", title, brand_removed)
+    normalized_title = title.strip()
+    if normalized_title and not (normalized_title == OWN_BRAND or normalized_title.startswith(OWN_BRAND + " ")):
+        out.append(v("coupang.productName", "BLOCK", "BRAND_NOT_HEAD", "상품명은 끄롱마제로 시작해야 합니다"))
+    if any(term in title for term in CLAIM_NEEDS_FACT):
+        out.append(v("coupang.productName", "WARN", "CLAIM_NEEDS_FACT",
+                     "안전·기능·인증 표현은 원상품 근거를 확인하세요"))
     cleaned = [t.strip() for t in tags if t.strip()]
     if len(cleaned) > 20:
         out.append(v("coupang.tags", "BLOCK", "TAG_COUNT_OVER_LIMIT", f"쿠팡 검색어는 최대 20개 ({len(cleaned)}개)"))
     elif len(cleaned) < 20:
-        out.append(v("coupang.tags", "BLOCK", "TAG_COUNT_UNDER_TARGET",
-                     f"검색어 {len(cleaned)}/20개. 제출 전 근거 있는 후보를 더 조사해야 합니다"))
+        out.append(v("coupang.tags", "WARN", "TAG_COUNT_UNDER_TARGET",
+                     f"검색어 {len(cleaned)}/20개. 20개는 최대치이며 추가 조사는 선택 사항입니다"))
     seen = set()
     for t in cleaned:
         if nlen(t) > 20:
@@ -239,21 +257,30 @@ def audit_plan(plan):
 
 
 def selftest():
-    bad = audit_naver("더이안 퍼즐펀치 최저가 무료배송 퍼즐펀치 추천", ["퍼즐 펀치", "더이안"], ["더이안"])
+    bad = audit_naver("끄롱마제 더이안 퍼즐펀치 최저가 무료배송 퍼즐펀치 추천",
+                      ["퍼즐 펀치", "더이안"], ["더이안"])
     rules = {x["rule"] for x in bad}
     assert {"PROMOTIONAL_PHRASE", "REMOVED_BRAND_LEAK", "DUPLICATE_TOKEN", "UNSUPPORTED_FILLER", "TAG_HAS_SPACE"} <= rules, rules
-    good = audit_naver("퍼즐펀치 모양펀치 퍼즐 만들기 DIY 종이 펀칭기", ["퍼즐펀치", "모양펀치", "펀칭기"], ["더이안"])
+    good = audit_naver("끄롱마제 퍼즐펀치 모양펀치 종이 펀칭기 만들기", ["퍼즐펀치", "모양펀치", "펀칭기"], ["더이안"])
     assert summarize(good)["ok"], good
-    cp_bad = audit_coupang("x" * 101, ["a" * 21, "특가", "태그<>"] + [f"t{i}" for i in range(19)], [])
+    naver_short = audit_naver("끄롱마제 퍼즐펀치 모양펀치", ["퍼즐펀치", "모양펀치"], [])
+    short_tag = next(x for x in naver_short if x["rule"] == "TAG_COUNT_UNDER_TARGET")
+    assert short_tag["severity"] == "WARN" and summarize(naver_short)["ok"], naver_short
+    unbranded = {x["rule"] for x in audit_naver("퍼즐펀치 모양펀치", [], [])}
+    assert "BRAND_NOT_HEAD" in unbranded, unbranded
+    claim = {x["rule"] for x in audit_naver("끄롱마제 안전 채칼", [], [])}
+    assert "CLAIM_NEEDS_FACT" in claim, claim
+    cp_bad = audit_coupang("끄롱마제 " + "x" * 101,
+                           ["a" * 21, "특가", "태그<>"] + [f"t{i}" for i in range(19)], [])
     r2 = {x["rule"] for x in cp_bad}
     assert {"LENGTH_OVER_LIMIT", "TAG_TOO_LONG", "TAG_COUNT_OVER_LIMIT", "TAG_INVALID_CHARS", "PROMOTIONAL_TAG"} <= r2, r2
-    cp_good = audit_coupang("퍼즐펀치 모양펀치 종이 퍼즐 만들기 펀칭기 어린이 DIY 공예 도구",
+    cp_good = audit_coupang("끄롱마제 퍼즐펀치 모양펀치 종이 퍼즐 만들기 펀칭기 어린이 DIY 공예 도구",
                             [f"퍼즐키워드{i}" for i in range(20)], ["더이안"])
     assert summarize(cp_good)["ok"], cp_good
-    cp_short = audit_coupang("퍼즐펀치 이불 건조대", ["이불건조대", "빨래건조대"], [])
+    cp_short = audit_coupang("끄롱마제 퍼즐펀치 이불 건조대", ["이불건조대", "빨래건조대"], [])
     short_count = next(x for x in cp_short if x["rule"] == "TAG_COUNT_UNDER_TARGET")
-    assert short_count["severity"] == "BLOCK", short_count
-    assert summarize(cp_short)["ok"] is False, cp_short
+    assert short_count["severity"] == "WARN", short_count
+    assert summarize(cp_short)["ok"] is True, cp_short
     assert summarize(audit_naver("퍼즐펀치\t모양", [], []))["ok"] is False
     # 이호 배치 규칙: 완성형이 0번이 아니면 WARN, 조합형 순서 뒤집히면 WARN
     judg = [{"keyword": "유산균", "type": "완성형", "matchedTerms": ["유산균"]},

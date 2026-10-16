@@ -4,7 +4,7 @@
 인터넷·브라우저 접근 없음. 근거 있는 값만 옮기고, 없는 값은 지어내지 않는다.
 seo_audit.py --plan / build_confirm_table.py --plan 이 읽는 plan 필드를 한 번에 채운다.
 
-옮기는 값(모두 F12/화면 근거 산출물에서만):
+F12/이호 산출물 병합용 선택 경로다. Maker 기본 경로에서는 이 스크립트를 요구하지 않는다.
   --title-build  naver_title_builder.py 출력
       naver.productName      = titleCandidates[--title-index].title   (기본 0번; 없으면 건드리지 않음)
       naver.tags             = tagCandidates[*].tag (최대 10)
@@ -17,6 +17,7 @@ seo_audit.py --plan / build_confirm_table.py --plan 이 읽는 plan 필드를 �
       coupang.tags           = searchTerms[*].term
   --coupang-category coupang_category_pick.py 출력
       coupang.categoryPath   = categoryCandidates[--coupang-cat-index].path (기본 0번)
+      coupang.categoryCandidates = categoryCandidates[:3] (상위 Wing 후보를 확인표에 보존)
       coupang.attributes     = {filled, empty}
   --run-audit    병합 후 seo_audit.audit_plan 을 실행해 plan.seoAudit 에 기록(네이버/쿠팡).
   --seo-audit    이미 저장한 seo_audit --plan 결과 JSON 을 plan.seoAudit 에 그대로 넣음(--run-audit 대안).
@@ -31,10 +32,12 @@ seo_audit.py --plan / build_confirm_table.py --plan 이 읽는 plan 필드를 �
 from __future__ import annotations
 
 import argparse
+import importlib
 import io
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
     try:
@@ -74,11 +77,14 @@ def merge(plan, title_build=None, naver_category=None, coupang=None,
     if title_build:
         cand = _at(title_build.get("titleCandidates"), title_index)
         if cand and cand.get("title"):
-            plan["naver"]["productName"] = cand["title"]
+            title = " ".join(part for part in str(cand["title"]).split() if part != "끄롱마제")
+            plan["naver"]["productName"] = f"끄롱마제 {title}".strip()
+            plan["naver"]["productNameSource"] = title_build.get("provider") or "f12"
             changed.append(f"naver.productName <- titleCandidates[{title_index}]")
         tags = [t.get("tag") for t in (title_build.get("tagCandidates") or []) if t.get("tag")]
         if tags:
             plan["naver"]["tags"] = tags[:10]
+            plan["naver"]["tagsSource"] = title_build.get("provider") or "f12"
             changed.append(f"naver.tags <- tagCandidates ({len(tags[:10])})")
         if title_build.get("judgeTable") is not None:
             plan["naver"]["keywordJudgements"] = title_build["judgeTable"]
@@ -103,13 +109,16 @@ def merge(plan, title_build=None, naver_category=None, coupang=None,
     # --- 쿠팡 노출상품명/검색어 (coupang) ---
     if coupang:
         if coupang.get("exposureName"):
-            plan["coupang"]["productName"] = coupang["exposureName"]
+            title = " ".join(part for part in str(coupang["exposureName"]).split() if part != "끄롱마제")
+            plan["coupang"]["productName"] = f"끄롱마제 {title}".strip()
+            plan["coupang"]["productNameSource"] = "product_facts"
             changed.append("coupang.productName <- exposureName")
         terms = [t.get("term") if isinstance(t, dict) else t
                  for t in (coupang.get("searchTerms") or [])]
         terms = [t for t in terms if t]
         if terms:
             plan["coupang"]["tags"] = terms
+            plan["coupang"]["tagsSource"] = "wing_recommendations_and_product_facts"
             changed.append(f"coupang.tags <- searchTerms ({len(terms)})")
 
     # --- 쿠팡 카테고리/속성 (coupang_category) ---
@@ -117,7 +126,10 @@ def merge(plan, title_build=None, naver_category=None, coupang=None,
         cat = _at(coupang_category.get("categoryCandidates"), coupang_cat_index)
         if cat and cat.get("path"):
             plan["coupang"]["categoryPath"] = cat["path"]
+            plan["coupang"]["categoryCandidates"] = (coupang_category.get("categoryCandidates") or [])[:3]
             changed.append(f"coupang.categoryPath <- categoryCandidates[{coupang_cat_index}]")
+        if isinstance(coupang_category.get("categoryEvidence"), dict):
+            plan["coupang"]["categoryEvidence"] = coupang_category["categoryEvidence"]
         if coupang_category.get("attributes") is not None:
             plan["coupang"]["attributes"] = coupang_category["attributes"]
             changed.append("coupang.attributes <- coupang_category")
@@ -128,7 +140,7 @@ def merge(plan, title_build=None, naver_category=None, coupang=None,
 def _run_audit(plan):
     """seo_audit.audit_plan 을 같은 폴더에서 import 해 실행하고 plan.seoAudit 에 기록."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import seo_audit  # noqa: E402
+    seo_audit = importlib.import_module("seo_audit")
     res = seo_audit.audit_plan(plan)
     seo = {}
     if "naver" in res:
@@ -199,7 +211,7 @@ def main():
 
 
 def selftest():
-    plan = {
+    plan: dict[str, Any] = {
         "naver": {"categoryPath": "", "categoryEvidence": {}, "keywordJudgements": [],
                   "productName": "", "tags": [], "salePrice": None},
         "coupang": {"categoryPath": "", "productName": "", "tags": [], "salePrice": None},
@@ -217,16 +229,25 @@ def selftest():
           "keywordAgreement": [], "warnings": []}
     cp = {"exposureName": "무선청소기 차량용 핸디", "searchTerms": [{"term": "무선청소기"}, {"term": "핸디청소기"}]}
     cc = {"categoryCandidates": [{"path": "생활용품>청소용품>진공청소기", "code": "111", "leaf": "진공청소기"}],
+          "categoryEvidence": {"method": "bounded_fallback", "fallbackSource": "own_listing",
+                               "sourceRef": "기존상품-1", "categoryId": "111",
+                               "officialLookup": {"terminal": True, "active": True},
+                               "liveSelected": {"ok": True}, "comparisonScope": "bounded_fallback",
+                               "fullTaxonomyComparison": False},
           "attributes": {"filled": [{"name": "수량", "value": "1개"}], "empty": []}}
 
     changed = merge(plan, title_build=tb, naver_category=nc, coupang=cp, coupang_category=cc)
-    assert plan["naver"]["productName"] == "무선청소기 차량용 핸디 청소기", plan["naver"]["productName"]
+    assert plan["naver"]["productName"] == "끄롱마제 무선청소기 차량용 핸디 청소기", plan["naver"]["productName"]
+    assert plan["naver"]["productNameSource"] == "f12"
     assert plan["naver"]["tags"] == ["무선청소기", "핸디청소기", "차량용청소기"], plan["naver"]["tags"]
     assert plan["naver"]["keywordJudgements"] == tb["judgeTable"]
     assert plan["naver"]["categoryPath"] == "생활/건강>청소기>무선청소기", plan["naver"]["categoryPath"]
     assert plan["naver"]["categoryEvidence"]["leaf"] == "무선청소기"
-    assert plan["coupang"]["productName"] == "무선청소기 차량용 핸디"
+    assert plan["coupang"]["productName"] == "끄롱마제 무선청소기 차량용 핸디"
     assert plan["coupang"]["tags"] == ["무선청소기", "핸디청소기"]
+    assert json.dumps(plan["coupang"]["categoryCandidates"]) == json.dumps(cc["categoryCandidates"])
+    assert plan["coupang"]["categoryEvidence"]["fallbackSource"] == "own_listing"
+    assert plan["coupang"]["tagsSource"] == "wing_recommendations_and_product_facts"
     assert plan["coupang"]["categoryPath"] == "생활용품>청소용품>진공청소기"
     assert plan["coupang"]["attributes"]["filled"][0]["name"] == "수량"
     assert changed, changed
@@ -234,7 +255,7 @@ def selftest():
     # title-index 선택
     plan2 = {"naver": {}, "coupang": {}}
     merge(plan2, title_build=tb, title_index=1)
-    assert plan2["naver"]["productName"] == "핸디 무선청소기 차량용 청소기"
+    assert plan2["naver"]["productName"] == "끄롱마제 핸디 무선청소기 차량용 청소기"
 
     # 빈 산출물 → 발명 금지(필드 안 건드림)
     plan3 = {"naver": {"productName": "기존"}, "coupang": {}}
