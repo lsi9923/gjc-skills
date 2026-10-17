@@ -4,10 +4,11 @@
   "naver": {
     "productName": "끄롱마제 무선 미니 고데기 휴대용 빗고데기 앞머리 볼륨 충전식",
     "categoryPath": "디지털/가전 > 이미용가전 > 헤어기기 > 고데기/매직기",
-    "optionAxes": ["구성"],
+    "optionUsable": false,
+    "optionAxes": [],
     "optionRows": [
       {
-        "values": ["핑크 본품 세트"],
+        "values": [],
         "originalPrice": 16200,
         "salePrice": 12900,
         "discount": 3300,
