@@ -38,7 +38,10 @@
 
 ## 윙 중간저장 초안 불러오기 (2026-10-17 P1·P2 11:54/11:55 성공 절차)
 1. 윙 탭을 앞으로(bringToFront). 저장 목록에서 행 '선택'을 locator(getByRole button '선택')로 클릭. 텍스트 노드 핸들 클릭 금지.
-2. 네이티브 confirm이 뜨면 수락. DOM 확인 모달이 뜨면 그 '확인'도 클릭. 이후 2.5초 대기.
+2. 경고 '입력하신 정보는 저장되지 않습니다'는 네이티브 confirm이 아니라 formV2.js 커스텀 DOM 모달이다. 현재 폼이 수정된 상태일 때만 뜬다. 뜨면 `.alert-confirm` 버튼을 클릭(조건부). `page.once('dialog')`로는 안 눌린다. 이후 2.5초 대기.
+   - 감사(읽기 전용)는 UI 대신 `appData.drafts` 또는 `GET /tenants/seller-web/vendor-inventory-draft/v2/draft-with-document-checksum?path=<초안ID>` 응답의 oSellerProduct로 정확히 한다.
 3. 로드 직후 옵션·검색어·고시 아코디언이 접혀 있어 빈칸(0개)처럼 보인다. 반드시 펼친 뒤 값을 읽는다. 펼치기 전 판정 금지.
 4. 등록상품명(판매자관리용)·카테고리 경로로 어떤 초안인지 확인한 뒤 수정.
+- 내부 동작(gjc 조사, `C:/Users/imda0/tmp/wing-draft-load-research.md`): '선택' → `GET /draft-with-document-checksum?path=<초안ID>` → Vuex `commit('preFill', oSellerProduct)`. URL 파라미터 로드는 없음. 목록 첫 열은 displayProductName(노출상품명)이라 비면 공란으로 보이지만 sellerProductName은 남아 있다.
+- 2026-10-17 초안 ID: P1 1792216557692, P2 1792205752642, P3 1792215531587, P4 1792194851299.
 - 저장 목록 첫 열이 공란인 초안(P3·P4)은 카테고리·저장시각으로 고른 뒤 4번에서 반드시 확인.

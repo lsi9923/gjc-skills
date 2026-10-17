@@ -122,17 +122,20 @@
   2) Locator 클릭 실패 시: 해당 요소의 `boundingBox()`를 측정하여 중심 좌표로 `page.mouse.click(x, y)`를 실행한다.
 - 확인 기준: 중간저장 목록 모달 창이 정상적으로 열리고, 내부에 저장된 행(`savedRows`)이 정상 표시됨.
 
-## 2026-10-17 쿠팡 Wing 중간저장 초안 전환 경고창 (네이티브 confirm 대화상자 블로킹)
-- 증상: Wing 중간저장 행 선택 후 모든 클릭·스크린샷 조작이 `Timeout waiting for element to be ready` 또는 `CDP viewport timeout` 에러를 내며 멈춤 (스크린샷 저장도 CDP 타임아웃으로 실패).
-- 원인: 초안 전환 시 뜨는 `입력하신 정보는 저장되지 않습니다. 변경하시겠습니까?` 경고가 HTML DOM 모달 요소가 아니라 브라우저 네이티브 `window.confirm()` 대화상자임. 네이티브 대화상자가 열려 있으면 브라우저 렌더러와 CDP 이벤트 루프가 전면 블로킹되어 DOM 검색과 스크린샷이 불가능해짐.
+## 2026-10-17 쿠팡 Wing 중간저장 초안 전환 경고창 (DOM 확인 모달 .alert-confirm)
+- 증상: Wing 중간저장 행 선택 후 다른 초안으로 전환 시 `입력하신 정보는 저장되지 않습니다. 변경하시겠습니까?` 경고창에서 멈추거나 타임아웃 발생.
+- 원인: `formV2.js` 내부 커스텀 DOM 모달(`w()`, `confirmButtonClass: "alert-confirm"`). 현재 폼이 수정된 상태(`!v().isEqual(oSellerProduct, oSellerProductSnapshot)`)에서만 표시되며, 폼 미수정 상태에서는 경고 모달 없이 즉시 `applyDraft`가 호출됨. 브라우저 네이티브 `window.confirm()`이 아니므로 `page.once('dialog')`는 무효함.
 - 해결:
-  1) DOM에서 '확인' 버튼을 찾으려고 시도하지 말 것 (DOM 트리에 버튼 노드가 존재하지 않음).
-  2) 행 '선택' 클릭 직전에 Playwright 대화상자 이벤트 리스너를 반드시 먼저 등록한다:
+  1) `page.once('dialog')`를 사용하지 않는다 (네이티브 대화상자가 아니므로 리스너 동작 불가).
+  2) 행 '선택' 클릭 후 조건부로 DOM 확인 모달의 버튼을 클릭한다:
      ```javascript
-     page.once('dialog', async d => await d.accept()); // 초안 불러오기 시 accept, 기존 유지 시 dismiss
+     const confirmBtn = page.locator('.alert-confirm');
+     if (await confirmBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+       await confirmBtn.click();
+     }
      ```
-  3) 리스너 등록 후 '선택' 버튼을 클릭하여 네이티브 대화상자를 즉시 자동 처리한다.
-- 확인 기준: 폼에 해당 초안의 노출상품명/관리상품명이 정상 로드되어 표시됨.
+  3) 폼이 미수정 상태여서 모달이 뜨지 않으면 대기 없이 즉시 다음 단계로 진행한다.
+- 확인 기준: `draft-with-document-checksum?path=${path}` API 응답의 `oSellerProduct.sellerProductName`이 실제 폼에 로드된 상품명과 일치하는지 확인.
 
 ## 2026-10-17 Aside 브라우저 재부팅 후 메인 창 없음
 - 증상: 시스템 재부팅 후 OmO 또는 브라우저 조작 에이전트가 `Aside u0 프로필에 브라우저 창이 없음` 오류로 조작 불가.
