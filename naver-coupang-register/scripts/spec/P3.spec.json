@@ -1,0 +1,82 @@
+{
+  "id": "P3",
+  "name": "무선 미니 빗고데기",
+  "naver": {
+    "productName": "끄롱마제 무선 미니 고데기 휴대용 빗고데기 앞머리 볼륨 충전식",
+    "categoryPath": "디지털/가전 > 이미용가전 > 헤어기기 > 고데기/매직기",
+    "optionAxes": ["구성"],
+    "optionRows": [
+      {
+        "values": ["핑크 본품 세트"],
+        "originalPrice": 15900,
+        "salePrice": 12900,
+        "stock": 999
+      }
+    ],
+    "tags": [
+      "여행용고데기", "빗고데기", "뽕고데기", "충전식고데기", "여행용",
+      "컬링빗", "C컬", "단발", "고데기빗", "헤어고데기"
+    ],
+    "brand": "끄롱마제",
+    "manufacturer": "협력업체",
+    "origin": "중국",
+    "notice": {
+      "group": "가정용 전기제품",
+      "fields": {
+        "품명 및 모델명": "무선 미니 빗고데기",
+        "정격전압 / 소비전력": "정격 5V USB-C, 온도조절 불가",
+        "크기 / 무게": "길이 약 14cm, 약 65g (공급처 표기)",
+        "제조자(수입자)": "협력업체",
+        "제조국": "중국",
+        "품질보증기준": "관련 법 및 소비자분쟁해결기준에 따름",
+        "A/S 책임자와 전화번호": null
+      }
+    },
+    "certification": {
+      "type": "구매대행 (안전인증 면제 대상)",
+      "kcExemptionType": "OVERSEAS",
+      "number": null
+    }
+  },
+  "wing": {
+    "sellerProductName": "끄롱마제 무선 미니 고데기 휴대용 빗고데기 앞머리 볼륨 충전식",
+    "displayProductName": "무선 미니 고데기 휴대용 빗고데기 앞머리 볼륨 충전식",
+    "categoryPath": "가전/디지털 > 이미용건강가전 > 안마기/건강/이미용가전 > 드라이어/헤어스타일러 > 고데기/매직기 > 여행용/휴대용",
+    "categoryId": 2353,
+    "displayCategoryCode": 103921,
+    "optionAxes": ["색상", "모델명/품번"],
+    "optionRows": [
+      {
+        "values": ["핑크", "충전식 무선 미니 빗고데기"],
+        "originalPrice": 15900,
+        "salePrice": 12900,
+        "stock": 999
+      }
+    ],
+    "searchTerms": [
+      "무선고데기", "미니고데기", "휴대용고데기", "앞머리고데기", "빗고데기",
+      "볼륨고데기", "충전식고데기", "여행용고데기", "뽕고데기", "뿌리볼륨",
+      "고데기빗", "C컬고데기", "앞머리볼륨", "USB고데기", "헤어고데기"
+    ],
+    "brand": "끄롱마제",
+    "manufacturer": "협력업체",
+    "origin": "중국",
+    "notice": {
+      "group": "가정용 전기제품",
+      "fields": {
+        "품명 및 모델명": "무선 미니 빗고데기",
+        "정격전압 / 소비전력": "정격 5V USB-C, 온도조절 불가",
+        "크기 / 무게": "길이 약 14cm, 약 65g (공급처 표기)",
+        "제조자(수입자)": "협력업체",
+        "제조국": "중국",
+        "품질보증기준": "관련 법 및 소비자분쟁해결기준에 따름",
+        "A/S 책임자와 전화번호": null
+      }
+    },
+    "certification": {
+      "type": "상세페이지 별도표기",
+      "certificationType": "certificationType_PRESENTED_IN_DETAIL_PAGE_1",
+      "parallelImport": "NOT_PARALLEL_IMPORTED"
+    }
+  }
+}

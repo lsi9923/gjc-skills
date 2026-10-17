@@ -118,5 +118,5 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 - **중간저장 목록 행 '선택' 및 초안 전환 경고창 (DOM 확인 모달 `.alert-confirm` 대응)**:
   - 초안 전환 시 뜨는 확인창은 네이티브 대화상자가 아니라 `formV2.js`의 커스텀 DOM 모달(`confirmButtonClass: "alert-confirm"`)이며, 폼 수정 이력이 있을 때만 조건부 표시된다 (`page.once('dialog')` 무효).
   - '선택' 클릭 후 조건부로 `page.locator('.alert-confirm').click()` 처리한다. 미수정 상태라 모달이 안 뜨면 대기 없이 진행한다.
-  - 확인 기준: `draft-with-document-checksum?path=${path}` 응답의 `sellerProductName`과 폼의 로드 상품명이 일치하는지 검증한다. 2회 실패 시 즉시 중단하고 "사용자 등록 시 직접 변경"으로 결과표에 기록한다.
+  - 확인 기준: `draft-with-document-checksum?path=${path}` 응답의 `sellerProductName`과 폼의 로드 상품명이 일치하는지 검증한다. 자체 재시도 1회 실패 시 [OmO 오류]로 Claude에게 보고하고, Claude 수정안으로 최소 2회 시도한 뒤에만 사용자 수동/결과표 기록으로 넘긴다 (Claude 수정안 2회 전 사용자 수동 이관 금지).
 - 새로 알게 된 화면 동작은 `memory/sites/wing.coupang.com.md` History 에 추가한다.
