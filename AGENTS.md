@@ -83,3 +83,11 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
 - **원인**: Aside 프로세스는 백그라운드에 떠 있으나 메인 GUI 창(`MainWindowTitle`)이 생성/활성화되지 않음.
 - **해결**: PowerShell에서 `Start-Process 'C:\Program Files\Aside\Application\Aside.exe'` 실행으로 창을 띄운 뒤 REPL에 재접속한다.
 - **확인**: `Get-Process Aside | Where-Object { $_.MainWindowTitle }` 로 MainWindowTitle 있는 창 존재 여부를 반드시 확인한다.
+- **Aside 사용자 로그인용 탭 실행 규칙 (보이는 창 띄우기)**:
+  - **증상**: `aside repl openTab()`으로 로그인 탭을 열었다고 보고했으나 사용자 화면에는 보이지 않음.
+  - **원인**: REPL 탭은 보이지 않는 백그라운드 자동화 세션에 열리고 세션 종료 시 소멸됨 (`listBrowserTabs` 빈 배열 반환).
+  - **해결**: 사용자가 직접 로그인해야 하는 탭은 `aside repl openTab()`을 쓰지 않고, 보이는 창에 직접 띄우도록 PowerShell에서 실행한다:
+    ```powershell
+    Start-Process 'C:\Program Files\Aside\Application\Aside.exe' -ArgumentList <URL들>
+    ```
+  - **확인**: `Get-Process Aside | Where-Object { $_.MainWindowTitle }` 의 `MainWindowTitle`에 해당 사이트 제목이 표시되는지 검증하고 사용자 확인을 거친다.

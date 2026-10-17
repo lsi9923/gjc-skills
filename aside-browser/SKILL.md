@@ -25,3 +25,15 @@ If installation or an update fails, report the error instead of guessing the CLI
   ```powershell
   Get-Process Aside | Where-Object { $_.MainWindowTitle }
   ```
+
+## User Login Tab Execution (사용자 로그인용 탭 실행 규칙)
+- **증상**: `aside repl openTab()`으로 로그인 탭을 열었다고 보고했으나 사용자 화면에는 보이지 않음.
+- **원인**: `aside repl` 탭은 보이지 않는 자동화 세션에 열리고 세션이 끝나면 사라짐 (`listBrowserTabs` 빈 배열 반환).
+- **해결**: 사용자 로그인용 탭은 `aside repl openTab()`을 쓰지 않고, 보이는 창에 직접 열리도록 실행한다:
+  ```powershell
+  Start-Process 'C:\Program Files\Aside\Application\Aside.exe' -ArgumentList <URL들>
+  ```
+- **확인**: 메인 창(`MainWindowTitle`)에 해당 사이트 제목이 표시되는지 검증하고 사용자 확인을 거친다:
+  ```powershell
+  Get-Process Aside | Where-Object { $_.MainWindowTitle }
+  ```
