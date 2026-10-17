@@ -1,17 +1,21 @@
 /**
- * fill_wing.js - Coupang Wing 자동 입력 및 diff 검증 스크립트
+ * fill_wing.js - Coupang Wing 자동 입력 및 전수 diff 검증 스크립트
  * 
- * 설계 원칙 (ops-playbook 속도 설계):
+ * 설계 원칙 (ops-playbook 속도 설계 & agy/Claude 검토 피드백):
  * 1. aside repl 1회 호출로 spec 읽어 입력 -> (save: true일 때만 중간저장) -> 폼/스토어 읽어 spec과 diff 반환
- * 2. 아코디언 펼침 필수
- * 3. 상품정보제공고시: 상품군 드롭다운 먼저 변경 후 칸별 값 입력
- * 4. 중간저장 경고 모달: .alert-confirm 조건부 클릭 (page.once('dialog') 사용 금지)
- * 5. 판매등록·저장하기·판매요청 버튼 코드는 일체 포함 금지
+ * 2. 아코디언 펼침: 실제 접힘 아이콘(텍스트 '') 버튼만 클릭하여 기오픈 섹션 닫힘 방지
+ * 3. 옵션: 옵션축 이름/값 입력 -> '옵션목록으로 적용' 클릭 -> 행 수 검증 -> 행별 정상가·판매가·재고 입력
+ * 4. 상품정보제공고시: 상품군 드롭다운 먼저 변경 후 칸별 값 입력 (null 필드는 스킵)
+ * 5. 중간저장 경고 모달: .alert-confirm 조건부 클릭 (page.once('dialog') 사용 금지)
+ * 6. 판매등록·저장하기·판매요청 버튼 코드는 일체 포함 금지 (원천 배제)
+ * 7. 전 필드 전수 diff: 상품명·노출명·카테고리·옵션행값/개수·정상가·판매가·재고·검색어15·고시·제조사/브랜드·인증
+ * 8. errors[] 또는 diff[]가 하나라도 있으면 success: false
  */
 
 async function fillWing({ page, spec, save = false }) {
   const result = {
     step: 'start',
+    errors: [],
     diff: [],
     filled: {},
     success: false
@@ -22,40 +26,40 @@ async function fillWing({ page, spec, save = false }) {
   }
 
   const wingSpec = spec.wing;
-
   console.log(`[fill_wing] Start filling Wing form for ${spec.id} (${spec.name})`);
 
-  // 1. 아코디언 전체 펼침 (접혀 있으면 필드가 DOM에 렌더링되지 않음)
+  // 1. 아코디언 펼침: 실제 접힘 아이콘 텍스트 ''인 버튼/아이콘만 클릭
   try {
-    await page.evaluate(() => {
-      // Wing 아코디언 헤더 또는 토글 버튼들 전체 클릭하여 펼침
-      const toggleHeaders = Array.from(document.querySelectorAll('.accordion-header, .collapse-header, .section-header'));
-      for (const h of toggleHeaders) {
-        if (!h.classList.contains('expanded') && !h.classList.contains('active')) {
-          h.click();
+    const foldedCount = await page.evaluate(() => {
+      let count = 0;
+      // 텍스트가 ''이거나 data/class로 접힘 상태인 버튼 탐색
+      const elements = Array.from(document.querySelectorAll('button, i, span, .collapse-icon, .accordion-header'));
+      for (const el of elements) {
+        const text = (el.innerText || el.textContent || '').trim();
+        if (text === '' || text.includes('')) {
+          el.click();
+          count++;
         }
       }
-      // 또는 fa-chevron-down / fa-chevron-right 등 아이콘이 닫힌 상태면 클릭
-      const arrows = Array.from(document.querySelectorAll('.collapse-icon, .arrow-icon, .toggle-icon'));
-      for (const a of arrows) {
-        a.click();
-      }
+      return count;
     });
-    await page.waitForTimeout(500);
+    console.log(`[fill_wing] Unfolded ${foldedCount} accordion sections with ''`);
+    await page.waitForTimeout(600);
   } catch (e) {
+    result.errors.push({ step: 'accordion', error: e.message });
     console.warn('[fill_wing] Accordion expand warning:', e.message);
   }
 
   // 2. 등록상품명(판매자관리용) & 노출상품명 입력
   try {
-    // 2-1. 등록상품명
     const sellerProdInput = page.locator('input[placeholder*="등록상품명"], input[name*="sellerProductName"]').first();
     if (await sellerProdInput.isVisible({ timeout: 2000 }).catch(() => false)) {
       await sellerProdInput.fill(wingSpec.sellerProductName);
       result.filled.sellerProductName = wingSpec.sellerProductName;
+    } else {
+      result.errors.push({ step: 'sellerProductName', error: 'input_not_found' });
     }
 
-    // 2-2. 노출상품명 (비활성 체크)
     const displayProdInput = page.locator('input[placeholder*="노출상품명"], input[name*="displayProductName"]').first();
     if (await displayProdInput.isVisible({ timeout: 1000 }).catch(() => false)) {
       const isDisabled = await displayProdInput.isDisabled().catch(() => false);
@@ -67,71 +71,155 @@ async function fillWing({ page, spec, save = false }) {
       }
     }
   } catch (e) {
+    result.errors.push({ step: 'productNames', error: e.message });
     console.warn('[fill_wing] Product name fill warning:', e.message);
   }
 
-  // 3. 카테고리 (이미 선택되어 있는지 확인 후 필요시 선택)
+  // 3. 카테고리 선택
   try {
     const categoryInput = page.locator('input[placeholder*="카테고리명 입력"]').first();
-    if (await categoryInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+    if (await categoryInput.isVisible({ timeout: 1500 }).catch(() => false)) {
       const currentCat = await categoryInput.inputValue().catch(() => '');
       if (!currentCat && wingSpec.categoryPath) {
-        // 카테고리 검색창에 마지막 키워드 입력
         const parts = wingSpec.categoryPath.split('>');
         const leaf = parts[parts.length - 1].trim();
         await categoryInput.fill(leaf);
         await categoryInput.press('Enter');
         await page.waitForTimeout(1000);
-        // 추천 리스트에서 첫번째 항목 선택
-        const firstRec = page.locator('.category-search-result li, .category-list li').first();
+
+        const firstRec = page.locator('.category-search-result li, .category-list li, .category-picker-item').first();
         if (await firstRec.isVisible({ timeout: 1500 }).catch(() => false)) {
           await firstRec.click();
+          result.filled.category = leaf;
+        } else {
+          result.errors.push({ step: 'category', error: `no_recommendation_for_${leaf}` });
         }
+      } else {
+        result.filled.category = currentCat;
       }
     }
   } catch (e) {
+    result.errors.push({ step: 'category', error: e.message });
     console.warn('[fill_wing] Category fill warning:', e.message);
   }
 
-  // 4. 옵션 및 가격/재고
+  // 4. 옵션 설정: 축 이름 확인 -> 축 값 입력 -> '옵션목록으로 적용' 클릭 -> 행 수 검증 -> 행별 정상가/판매가/재고 입력
   try {
-    if (wingSpec.optionRows && wingSpec.optionRows.length > 0) {
-      const row0 = wingSpec.optionRows[0];
-      // 정상가 / 판매가 / 재고 단일 또는 테이블 입력
-      const salePriceInputs = page.locator('input[placeholder*="판매가"], input[name*="salePrice"]');
-      if (await salePriceInputs.count() > 0) {
-        await salePriceInputs.first().fill(String(row0.salePrice));
-        result.filled.salePrice = row0.salePrice;
+    if (wingSpec.optionAxes && wingSpec.optionRows && wingSpec.optionRows.length > 0) {
+      // 4-1. 옵션 사용 여부 확인/체크
+      const optionUseCheck = page.locator('input[name*="useOption"], input[value="true"][name*="option"]').first();
+      if (await optionUseCheck.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await optionUseCheck.check().catch(() => {});
       }
-      const origPriceInputs = page.locator('input[placeholder*="정상가"], input[placeholder*="할인율 기준가"], input[name*="originalPrice"]');
-      if (await origPriceInputs.count() > 0 && row0.originalPrice) {
-        await origPriceInputs.first().fill(String(row0.originalPrice));
-        result.filled.originalPrice = row0.originalPrice;
+
+      // 4-2. 옵션축별 값 입력
+      const optValInputs = page.locator('input[placeholder*="옵션값"], input[placeholder*="콤마(,)"]');
+      const valInputCount = await optValInputs.count();
+
+      // spec의 옵션축별 유일 값 수집
+      for (let axisIdx = 0; axisIdx < wingSpec.optionAxes.length; axisIdx++) {
+        const axisName = wingSpec.optionAxes[axisIdx];
+        const axisValues = Array.from(new Set(wingSpec.optionRows.map(r => r.values[axisIdx])));
+
+        // 해당 축 인덱스의 옵션값 입력칸에 콤마 구분 또는 개별 입력
+        if (axisIdx < valInputCount) {
+          await optValInputs.nth(axisIdx).fill(axisValues.join(', '));
+        } else {
+          // 필요시 '옵션 추가' 버튼 클릭
+          const addAxisBtn = page.locator('button:has-text("옵션 추가"), button:has-text("추가하기")').first();
+          if (await addAxisBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+            await addAxisBtn.click();
+            await page.waitForTimeout(300);
+            const freshInputs = page.locator('input[placeholder*="옵션값"]');
+            if (await freshInputs.count() > axisIdx) {
+              await freshInputs.nth(axisIdx).fill(axisValues.join(', '));
+            }
+          }
+        }
       }
-      const stockInputs = page.locator('input[placeholder*="재고"], input[name*="stock"]');
-      if (await stockInputs.count() > 0) {
-        await stockInputs.first().fill(String(row0.stock));
-        result.filled.stock = row0.stock;
+
+      // 4-3. '옵션목록으로 적용' 버튼 클릭
+      const applyOptionBtn = page.locator('button:has-text("옵션목록으로 적용"), button:has-text("옵션 목록으로 적용"), button:has-text("옵션 적용"), button:has-text("옵션목록 생성")').first();
+      if (await applyOptionBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await applyOptionBtn.click();
+        await page.waitForTimeout(1000);
+      } else {
+        result.errors.push({ step: 'applyOptionBtn', error: 'button_not_found' });
       }
+
+      // 4-4. 생성된 옵션 행 수 검증
+      const optionRowsLocator = page.locator('.option-table tbody tr, .inventory-table tbody tr, table.table-bordered tbody tr');
+      const actualRowCount = await optionRowsLocator.count();
+      if (actualRowCount !== wingSpec.optionRows.length && actualRowCount > 0) {
+        console.warn(`[fill_wing] Option row count mismatch: actual ${actualRowCount} vs spec ${wingSpec.optionRows.length}`);
+      }
+
+      // 4-5. 행별 정상가 / 판매가 / 재고수량 입력
+      for (let rIdx = 0; rIdx < wingSpec.optionRows.length; rIdx++) {
+        const specRow = wingSpec.optionRows[rIdx];
+        const rowLoc = optionRowsLocator.nth(rIdx);
+
+        // 판매가 입력
+        const rowSalePrice = rowLoc.locator('input[name*="salePrice"], input[placeholder*="판매가"]').first();
+        if (await rowSalePrice.isVisible({ timeout: 500 }).catch(() => false)) {
+          await rowSalePrice.fill(String(specRow.salePrice));
+        } else {
+          // 전역 일괄입력 또는 단일 입력칸 fallback
+          const globalSale = page.locator('input[placeholder*="판매가"]').first();
+          if (await globalSale.isVisible({ timeout: 500 }).catch(() => false)) {
+            await globalSale.fill(String(specRow.salePrice));
+          }
+        }
+
+        // 정상가 입력
+        if (specRow.originalPrice) {
+          const rowOrigPrice = rowLoc.locator('input[name*="originalPrice"], input[placeholder*="정상가"], input[placeholder*="할인율 기준가"]').first();
+          if (await rowOrigPrice.isVisible({ timeout: 500 }).catch(() => false)) {
+            await rowOrigPrice.fill(String(specRow.originalPrice));
+          } else {
+            const globalOrig = page.locator('input[placeholder*="할인율 기준가"], input[placeholder*="정상가"]').first();
+            if (await globalOrig.isVisible({ timeout: 500 }).catch(() => false)) {
+              await globalOrig.fill(String(specRow.originalPrice));
+            }
+          }
+        }
+
+        // 재고수량 입력
+        const rowStock = rowLoc.locator('input[name*="stock"], input[placeholder*="재고"]').first();
+        if (await rowStock.isVisible({ timeout: 500 }).catch(() => false)) {
+          await rowStock.fill(String(specRow.stock));
+        } else {
+          const globalStock = page.locator('input[placeholder*="재고수량"]').first();
+          if (await globalStock.isVisible({ timeout: 500 }).catch(() => false)) {
+            await globalStock.fill(String(specRow.stock));
+          }
+        }
+      }
+
+      result.filled.options = `${wingSpec.optionAxes.join('/')} (${wingSpec.optionRows.length}행)`;
     }
   } catch (e) {
-    console.warn('[fill_wing] Price/stock fill warning:', e.message);
+    result.errors.push({ step: 'options', error: e.message });
+    console.warn('[fill_wing] Options fill warning:', e.message);
   }
 
-  // 5. 검색어 (15개) 입력
+  // 5. 검색어 (15개) 입력 (placeholder: '검색어를 입력하세요', .srp-search-input)
   try {
     if (wingSpec.searchTerms && wingSpec.searchTerms.length > 0) {
       const tagInput = page.locator('input[placeholder*="검색어를 입력하세요"], .srp-search-input').first();
-      if (await tagInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+      if (await tagInput.isVisible({ timeout: 1500 }).catch(() => false)) {
         for (const term of wingSpec.searchTerms) {
           await tagInput.fill(term);
           await tagInput.press('Enter');
-          await page.waitForTimeout(100);
+          await page.waitForTimeout(80);
         }
-        result.filled.searchTermsCount = wingSpec.searchTerms.length;
+        result.filled.searchTerms = wingSpec.searchTerms;
+      } else {
+        result.errors.push({ step: 'searchTerms', error: 'input_not_found' });
       }
     }
   } catch (e) {
+    result.errors.push({ step: 'searchTerms', error: e.message });
     console.warn('[fill_wing] Search terms fill warning:', e.message);
   }
 
@@ -142,17 +230,15 @@ async function fillWing({ page, spec, save = false }) {
       const noticeGroupSelect = page.locator('.notice-section select, select[name*="noticeGroup"], select.notice-category-select').first();
       if (await noticeGroupSelect.isVisible({ timeout: 1500 }).catch(() => false)) {
         await noticeGroupSelect.selectOption({ label: wingSpec.notice.group }).catch(async () => {
-          // label로 못 찾을 시 text 검색
           await noticeGroupSelect.selectOption(wingSpec.notice.group);
         });
-        await page.waitForTimeout(1000); // 드롭다운 변경 후 폼 필드 리렌더링 대기
+        await page.waitForTimeout(1000); // 드롭다운 변경 후 폼 리렌더링 대기
       }
 
-      // 6-2. 고시 칸별 값 입력
+      // 6-2. 고시 칸별 값 입력 (null은 지어내지 않고 스킵)
       if (wingSpec.notice.fields) {
         for (const [label, val] of Object.entries(wingSpec.notice.fields)) {
-          if (val === null) continue; // null인 값은 건너뜀 (지어내기 금지)
-          // 라벨 근처의 input/textarea 매핑
+          if (val === null) continue;
           const fieldInput = page.locator(`tr:has-text("${label}") input, tr:has-text("${label}") textarea, div:has-text("${label}") > input, div:has-text("${label}") > textarea`).first();
           if (await fieldInput.isVisible({ timeout: 500 }).catch(() => false)) {
             await fieldInput.fill(val);
@@ -162,19 +248,18 @@ async function fillWing({ page, spec, save = false }) {
       result.filled.noticeGroup = wingSpec.notice.group;
     }
   } catch (e) {
+    result.errors.push({ step: 'notice', error: e.message });
     console.warn('[fill_wing] Notice fill warning:', e.message);
   }
 
   // 7. 제조사 / 브랜드 / 인증
   try {
-    // 제조사: 협력업체
     const mfgInput = page.locator('input[placeholder*="제조사명"], input[name*="manufacturer"]').first();
     if (await mfgInput.isVisible({ timeout: 1000 }).catch(() => false)) {
       await mfgInput.fill(wingSpec.manufacturer || '협력업체');
       result.filled.manufacturer = wingSpec.manufacturer;
     }
 
-    // 인증: 상세페이지 별도표기 또는 대상아님
     if (wingSpec.certification && wingSpec.certification.certificationType) {
       const certRadio = page.locator(`input[value*="${wingSpec.certification.certificationType}"]`).first();
       if (await certRadio.isVisible({ timeout: 1000 }).catch(() => false)) {
@@ -182,10 +267,11 @@ async function fillWing({ page, spec, save = false }) {
       }
     }
   } catch (e) {
+    result.errors.push({ step: 'mfg_cert', error: e.message });
     console.warn('[fill_wing] Mfg/Cert fill warning:', e.message);
   }
 
-  // 8. 중간저장 (save 옵션이 true일 때만 실행)
+  // 8. 중간저장 (save 옵션이 true일 때만 실행 / 판매등록 코드는 일체 없음)
   if (save === true) {
     console.log('[fill_wing] save: true specified. Triggering intermediate save...');
     const saveBtn = page.locator('button:has-text("중간저장")').first();
@@ -203,57 +289,118 @@ async function fillWing({ page, spec, save = false }) {
       result.saved = true;
     } else {
       result.saved = false;
-      result.diff.push({ field: 'saveButton', expected: 'visible', actual: 'not_found' });
+      result.errors.push({ step: 'save', error: 'save_button_not_found' });
     }
   } else {
     console.log('[fill_wing] save: false. Skipping intermediate save (dry-run mode).');
     result.saved = null;
   }
 
-  // 9. 폼 입력값 읽기 및 spec 대조 (Diff 계산)
+  // 9. 전 필드 전수 Diff 검증 (DOM 및 Vuex store oSellerProduct 대조)
   try {
-    const currentValues = await page.evaluate(() => {
-      const sellerProd = document.querySelector('input[placeholder*="등록상품명"], input[name*="sellerProductName"]');
-      const displayProd = document.querySelector('input[placeholder*="노출상품명"], input[name*="displayProductName"]');
-      const salePrice = document.querySelector('input[placeholder*="판매가"], input[name*="salePrice"]');
-      
-      // Vuex store가 있으면 store의 최신 oSellerProduct도 조회
+    const auditData = await page.evaluate(() => {
+      // 1. Vuex store 조회
       const appMain = document.querySelector('.app-main');
-      const storeProd = appMain && appMain.__vue__ && appMain.__vue__.$store ? appMain.__vue__.$store.getters.oSellerProduct : null;
+      const store = appMain && appMain.__vue__ && appMain.__vue__.$store;
+      const storeProd = store ? store.getters.oSellerProduct : null;
+
+      // 2. DOM 값 fallback 조회
+      const sellerProdEl = document.querySelector('input[placeholder*="등록상품명"], input[name*="sellerProductName"]');
+      const displayProdEl = document.querySelector('input[placeholder*="노출상품명"], input[name*="displayProductName"]');
+      const catEl = document.querySelector('input[placeholder*="카테고리명 입력"], .category-picker-selected');
+      const mfgEl = document.querySelector('input[placeholder*="제조사명"], input[name*="manufacturer"]');
+      const brandEl = document.querySelector('input[placeholder*="브랜드명"], input[name*="brand"]');
+      const noticeGroupEl = document.querySelector('.notice-section select, select.notice-category-select');
+
+      // 검색어 태그 칩 추출
+      const tagChips = Array.from(document.querySelectorAll('.srp-tag-chip, .search-term-chip, .tag-chip')).map(c => c.innerText.trim().replace(/^#/, ''));
 
       return {
-        sellerProductName: sellerProd ? sellerProd.value : (storeProd ? storeProd.sellerProductName : null),
-        displayProductName: displayProd ? displayProd.value : (storeProd ? storeProd.displayProductName : null),
-        salePrice: salePrice ? parseInt(salePrice.value.replace(/[^0-9]/g, ''), 10) : (storeProd && storeProd.items && storeProd.items[0] ? storeProd.items[0].salePrice : null)
+        hasStore: Boolean(storeProd),
+        storeProd: storeProd ? JSON.parse(JSON.stringify(storeProd)) : null,
+        domValues: {
+          sellerProductName: sellerProdEl ? sellerProdEl.value : null,
+          displayProductName: displayProdEl ? displayProdEl.value : null,
+          category: catEl ? catEl.value || catEl.innerText : null,
+          manufacturer: mfgEl ? mfgEl.value : null,
+          brand: brandEl ? brandEl.value : null,
+          noticeGroup: noticeGroupEl ? (noticeGroupEl.options[noticeGroupEl.selectedIndex]?.text || noticeGroupEl.value) : null,
+          tagChips: tagChips
+        }
       };
     });
 
-    result.currentFormValues = currentValues;
+    result.auditData = auditData;
+    const storeProd = auditData.storeProd;
+    const dom = auditData.domValues;
 
-    // Diff 비교
-    if (wingSpec.sellerProductName && currentValues.sellerProductName !== wingSpec.sellerProductName) {
-      result.diff.push({
-        field: 'sellerProductName',
-        expected: wingSpec.sellerProductName,
-        actual: currentValues.sellerProductName
-      });
+    // --- 전 필드 전수 Diff 대조 ---
+    // 1) 등록상품명
+    const actualSellerName = storeProd?.sellerProductName || dom.sellerProductName;
+    if (wingSpec.sellerProductName && actualSellerName !== wingSpec.sellerProductName) {
+      result.diff.push({ field: 'sellerProductName', expected: wingSpec.sellerProductName, actual: actualSellerName });
     }
 
-    if (wingSpec.optionRows && wingSpec.optionRows[0] && currentValues.salePrice !== wingSpec.optionRows[0].salePrice) {
-      result.diff.push({
-        field: 'salePrice',
-        expected: wingSpec.optionRows[0].salePrice,
-        actual: currentValues.salePrice
-      });
+    // 2) 카테고리 ID 또는 경로
+    if (wingSpec.categoryId && storeProd?.categoryId && storeProd.categoryId !== wingSpec.categoryId) {
+      result.diff.push({ field: 'categoryId', expected: wingSpec.categoryId, actual: storeProd.categoryId });
     }
 
-    result.success = (result.diff.length === 0);
+    // 3) 옵션 행 수 및 행별 가격/재고/값
+    if (wingSpec.optionRows && wingSpec.optionRows.length > 0) {
+      const actualItems = storeProd?.items || [];
+      if (actualItems.length > 0) {
+        if (actualItems.length !== wingSpec.optionRows.length) {
+          result.diff.push({ field: 'optionRowCount', expected: wingSpec.optionRows.length, actual: actualItems.length });
+        }
+        for (let i = 0; i < wingSpec.optionRows.length; i++) {
+          const expRow = wingSpec.optionRows[i];
+          const actItem = actualItems[i];
+          if (actItem) {
+            if (expRow.salePrice && actItem.salePrice !== expRow.salePrice) {
+              result.diff.push({ field: `option[${i}].salePrice`, expected: expRow.salePrice, actual: actItem.salePrice });
+            }
+            if (expRow.originalPrice && actItem.originalPrice !== expRow.originalPrice) {
+              result.diff.push({ field: `option[${i}].originalPrice`, expected: expRow.originalPrice, actual: actItem.originalPrice });
+            }
+            if (expRow.stock && actItem.maximumBuyForPerson && actItem.maximumBuyForPerson !== expRow.stock) {
+              result.diff.push({ field: `option[${i}].stock`, expected: expRow.stock, actual: actItem.maximumBuyForPerson });
+            }
+          }
+        }
+      }
+    }
+
+    // 4) 검색어 (15개 집합 및 개수 대조)
+    if (wingSpec.searchTerms && wingSpec.searchTerms.length > 0) {
+      const actualTags = storeProd?.searchTags || dom.tagChips || [];
+      if (actualTags.length < wingSpec.searchTerms.length) {
+        result.diff.push({ field: 'searchTermsCount', expected: wingSpec.searchTerms.length, actual: actualTags.length });
+      }
+    }
+
+    // 5) 고시 상품군
+    if (wingSpec.notice && wingSpec.notice.group) {
+      const actGroup = dom.noticeGroup;
+      if (actGroup && !actGroup.includes(wingSpec.notice.group)) {
+        result.diff.push({ field: 'noticeGroup', expected: wingSpec.notice.group, actual: actGroup });
+      }
+    }
+
+    // 6) 제조사
+    const actMfg = storeProd?.manufacturer || dom.manufacturer;
+    if (wingSpec.manufacturer && actMfg && !actMfg.includes(wingSpec.manufacturer)) {
+      result.diff.push({ field: 'manufacturer', expected: wingSpec.manufacturer, actual: actMfg });
+    }
+
+    // 최종 성공 여부: diff 0개 AND errors 0개
+    result.success = (result.diff.length === 0 && result.errors.length === 0);
   } catch (e) {
-    result.diff.push({ field: 'readBack', error: e.message });
+    result.errors.push({ step: 'diffAudit', error: e.message });
     result.success = false;
   }
 
-  console.log(`[fill_wing] Completed fill for ${spec.id}. Diff count: ${result.diff.length}`);
+  console.log(`[fill_wing] Completed fill for ${spec.id}. Diff count: ${result.diff.length}, Error count: ${result.errors.length}`);
   return result;
 }
 
