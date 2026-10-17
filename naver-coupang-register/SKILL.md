@@ -6,7 +6,7 @@ autoInject:
     - "sell.smartstore.naver.com/**"
     - "wing.coupang.com/tenants/seller-web/vendor-inventory/**"
 ---
-실행 전 references/known-errors.md를 읽고, 새 오류 해결 시 같은 형식으로 추가한다.
+실행 전 references/known-errors.md 와 references/ops-playbook-2026-10-17.md 를 반드시 먼저 읽고, 새 오류 해결 시 같은 형식으로 추가한다.
 <!-- MAKER-SELLING-REGISTER:START -->
 ## 속도 우선 기본 경로 — Maker 우선, 필수값만 게이트
 - 네이버는 Maker Selling Helper의 실제 `maker_ui.json`을 기본 경로로 즉시 읽는다(키워드 칩·카테고리 후보·태그 후보). 추출기에는 최종 상품명 필드가 없으므로 상품명은 원상품 사실과 Maker 칩으로 빌드한다. F12 패킷 수집·terms 분류는 사용자가 명시적으로 요청하지 않는 한 하지 않는다. 출처는 `maker_ui`로 보존하고 F12 근거로 가장하지 않는다.

@@ -133,3 +133,22 @@
      ```
   3) 리스너 등록 후 '선택' 버튼을 클릭하여 네이티브 대화상자를 즉시 자동 처리한다.
 - 확인 기준: 폼에 해당 초안의 노출상품명/관리상품명이 정상 로드되어 표시됨.
+
+## 2026-10-17 Aside 브라우저 재부팅 후 메인 창 없음
+- 증상: 시스템 재부팅 후 OmO 또는 브라우저 조작 에이전트가 `Aside u0 프로필에 브라우저 창이 없음` 오류로 조작 불가.
+- 원인: Aside 백그라운드 프로세스는 떠 있으나 메인 GUI 창(`MainWindowTitle`)이 생성/활성화되지 않음.
+- 해결: PowerShell에서 `Start-Process 'C:\Program Files\Aside\Application\Aside.exe'` 실행으로 창을 띄운 뒤 REPL에 재접속한다.
+- 확인: `Get-Process Aside | Where-Object { $_.MainWindowTitle }` 로 MainWindowTitle 있는 창 존재 확인.
+
+## 2026-10-17 Aside REPL openTab() 사용자 미노출
+- 증상: `aside repl openTab()`으로 로그인 탭을 열었다고 보고했으나 사용자의 실제 화면(GUI)에는 탭이 보이지 않음.
+- 원인: `aside repl` 탭은 보이지 않는 백그라운드 자동화 세션에 열리고 세션이 종료되면 소멸됨 (`listBrowserTabs` 빈 배열 반환). 사용자가 직접 볼 수 없어 로그인 불가.
+- 해결: 사용자 로그인용 탭은 `aside repl openTab()`을 쓰지 않고, 보이는 창에 직접 열리도록 실행한다:
+  `Start-Process 'C:\Program Files\Aside\Application\Aside.exe' -ArgumentList <URL들>`
+- 확인: `Get-Process Aside | Where-Object { $_.MainWindowTitle }` 에 해당 사이트 제목이 정상 표시되는지 확인하고 사용자에게 최종 확인 요청.
+
+## 2026-10-17 네이버 스마트스토어 '네이버 아이디로 새로 가입' 화면
+- 증상: 스마트스토어 로그인 시도 시 '네이버 아이디로 새로 가입' 화면이 표시되며 진입 불가.
+- 원인: 스마트스토어에 연동되지 않은 네이버 개인 아이디로 로그인을 시도했거나 로그인 수단을 잘못 선택함.
+- 해결: 해당 화면에서 진행하지 말고 즉시 취소한 뒤, 반드시 **'커머스ID(이메일)'** 로그인 버튼을 선택하여 가입된 커머스 아이디와 비밀번호로 로그인한다.
+- 확인: 스마트스토어 판매자센터 메인 대시보드 및 상품등록 URL(`sell.smartstore.naver.com/#/products/create`) 정상 로드 확인.
