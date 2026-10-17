@@ -38,7 +38,7 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
 - Wing의 `AI로 검색필터 채우기`는 보이면 실행할 수 있지만 선택 기능이다. 실제 카테고리 필수 속성만 상품 사실과 대조하고, 선택 필터의 전체 검수·재진입 감사는 완료 조건이 아니다.
 - 요청된 여러 상품은 준비를 연속으로 진행하고 한 번에 간결한 통합 확인표로 묶는다. 각 상품의 필수값과 충돌을 모두 표시하고 사용자가 해당 목록을 승인한 뒤 실제 제출을 순차 진행한다. 확인표 승인 전 최종 제출은 하지 않는다.
 - 쿠팡 Wing 중간저장 배너/목록 열기 조작 시 텍스트 노드 클릭으로 인한 `Node is not an Element (text node)` 에러를 방지하기 위해, 반드시 `page.getByText(/중간저장 된 내용/).first()` locator로 클릭한다. 실패 시 해당 요소의 `boundingBox()` 중심 좌표로 `page.mouse.click(x, y)`를 수행하며, 중간저장 목록 모달에 저장 행(`savedRows`)이 정상 표시되는지 검증한다.
-- 쿠팡 Wing 중간저장 목록 행의 '선택' 클릭 또는 덮어쓰기 경고 확인이 `Timeout waiting for element to be ready`로 실패할 경우(locator 및 mouse 좌표 클릭 모두 실패 시), 가림이나 모달 애니메이션 등 원인을 자의적으로 추정하지 말고 실패 재현 사실만 기록한다. 2회 실패 시 즉시 중단하며, 해당 수정 필드는 "사용자 등록 시 직접 변경" 항목으로 결과표(`next-session-result.md`)에 명확히 기록하여 사용자에게 전달한다.
+- 쿠팡 Wing 중간저장 목록 행 '선택' 시 나타나는 초안 전환 경고(`입력하신 정보는 저장되지 않습니다...`)는 브라우저 네이티브 `confirm` 대화상자이므로 페이지 렌더링 및 CDP 명령을 전면 차단하여 `Timeout waiting for element to be ready` / `CDP viewport timeout`을 유발한다. 따라서 DOM에서 확인 버튼을 찾으려 하지 말고, 반드시 '선택' 클릭 직전에 `page.once('dialog', d => d.accept())` (유지 시 `dismiss()`) 리스너를 먼저 등록한 뒤 클릭한다. 폼에 해당 초안의 상품명이 표시되는지 검증하고, 2회 실패 시 즉시 중단하여 "사용자 등록 시 직접 변경"으로 결과표(`next-session-result.md`)에 기록한다.
 
 ## 4. 제3자 상표의 KIPRIS 공식 확인 (포털 검색 대체 금지)
 - 해외구매대행 및 사입 소싱, 스마트스토어·쿠팡 상품 등록 시 상표권 검증은 **포털(네이버/다음/구글 등) 검색으로 절대 때우지 않는다**.

@@ -115,5 +115,7 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 - 이미지 반려/업로드 실패 → 규격(정사각형, 3MB) 확인 후 재업로드.
 - 캡차·보안문자·재로그인 → 사용자에게 넘긴다. **우회하지 않는다.**
 - 중간저장 배너/목록 열기 ("Node is not an Element" 에러) → 텍스트 노드 클릭 시 발생하므로 `page.getByText(/중간저장 된 내용/).first()` locator로 클릭하고, 실패 시 `boundingBox()` 중심 좌표로 `page.mouse.click(x, y)`를 실행한다. 목록 모달에 저장 행(`savedRows`)이 정상 표시되는지 확인한다.
-- 중간저장 목록 행 '선택' 및 경고 확인 타임아웃 (`Timeout waiting for element to be ready`, locator·mouse 실패) → 원인 추정(가림/애니메이션 등)을 금지하고 재현 사실만 기록한다. 2회 실패 시 즉시 중단하고, 해당 수정은 "사용자 등록 시 직접 변경"으로 결과표(`next-session-result.md`)에 기록한다.
+- **중간저장 목록 행 '선택' 및 초안 전환 경고창 (`confirm` 대화상자 블로킹 대응)**:
+  - 초안 전환 시 뜨는 확인창은 DOM 요소가 아닌 브라우저 네이티브 `confirm` 대화상자이므로 DOM에서 버튼을 찾으면 `Timeout waiting for element to be ready` 및 `CDP viewport timeout`이 발생한다.
+  - 반드시 '선택' 버튼 클릭 직전에 `page.once('dialog', d => d.accept())`(유지하려면 `dismiss()`)를 등록하고 클릭한다. 폼에 해당 초안 상품명이 정상 표시되는지 확인한다. 2회 실패 시 즉시 중단하고 "사용자 등록 시 직접 변경"으로 결과표에 기록한다.
 - 새로 알게 된 화면 동작은 `memory/sites/wing.coupang.com.md` History 에 추가한다.
