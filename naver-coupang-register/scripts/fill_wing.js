@@ -342,30 +342,33 @@ async function fillWing({ page, spec, save = false }) {
     }
 
     // 2) 카테고리 ID 또는 경로
-    if (wingSpec.categoryId && storeProd?.categoryId && storeProd.categoryId !== wingSpec.categoryId) {
-      result.diff.push({ field: 'categoryId', expected: wingSpec.categoryId, actual: storeProd.categoryId });
+    if (wingSpec.categoryId) {
+      const actCatId = storeProd ? storeProd.categoryId : null;
+      if (actCatId !== wingSpec.categoryId) {
+        result.diff.push({ field: 'categoryId', expected: wingSpec.categoryId, actual: actCatId });
+      }
     }
 
     // 3) 옵션 행 수 및 행별 가격/재고/값
     if (wingSpec.optionRows && wingSpec.optionRows.length > 0) {
-      const actualItems = storeProd?.items || [];
-      if (actualItems.length > 0) {
-        if (actualItems.length !== wingSpec.optionRows.length) {
-          result.diff.push({ field: 'optionRowCount', expected: wingSpec.optionRows.length, actual: actualItems.length });
-        }
-        for (let i = 0; i < wingSpec.optionRows.length; i++) {
-          const expRow = wingSpec.optionRows[i];
-          const actItem = actualItems[i];
-          if (actItem) {
-            if (expRow.salePrice && actItem.salePrice !== expRow.salePrice) {
-              result.diff.push({ field: `option[${i}].salePrice`, expected: expRow.salePrice, actual: actItem.salePrice });
-            }
-            if (expRow.originalPrice && actItem.originalPrice !== expRow.originalPrice) {
-              result.diff.push({ field: `option[${i}].originalPrice`, expected: expRow.originalPrice, actual: actItem.originalPrice });
-            }
-            if (expRow.stock && actItem.maximumBuyForPerson && actItem.maximumBuyForPerson !== expRow.stock) {
-              result.diff.push({ field: `option[${i}].stock`, expected: expRow.stock, actual: actItem.maximumBuyForPerson });
-            }
+      const actualItems = (storeProd && storeProd.items) ? storeProd.items : [];
+      if (actualItems.length !== wingSpec.optionRows.length) {
+        result.diff.push({ field: 'optionRowCount', expected: wingSpec.optionRows.length, actual: actualItems.length });
+      }
+      for (let i = 0; i < wingSpec.optionRows.length; i++) {
+        const expRow = wingSpec.optionRows[i];
+        const actItem = actualItems[i] || null;
+        if (!actItem) {
+          result.diff.push({ field: `option[${i}]`, expected: expRow, actual: null });
+        } else {
+          if (expRow.salePrice && actItem.salePrice !== expRow.salePrice) {
+            result.diff.push({ field: `option[${i}].salePrice`, expected: expRow.salePrice, actual: actItem.salePrice });
+          }
+          if (expRow.originalPrice && actItem.originalPrice !== expRow.originalPrice) {
+            result.diff.push({ field: `option[${i}].originalPrice`, expected: expRow.originalPrice, actual: actItem.originalPrice });
+          }
+          if (expRow.stock && actItem.maximumBuyForPerson !== expRow.stock) {
+            result.diff.push({ field: `option[${i}].stock`, expected: expRow.stock, actual: actItem.maximumBuyForPerson });
           }
         }
       }
@@ -373,7 +376,7 @@ async function fillWing({ page, spec, save = false }) {
 
     // 4) 검색어 (15개 집합 및 개수 대조)
     if (wingSpec.searchTerms && wingSpec.searchTerms.length > 0) {
-      const actualTags = storeProd?.searchTags || dom.tagChips || [];
+      const actualTags = (storeProd && storeProd.searchTags) ? storeProd.searchTags : (dom.tagChips || []);
       if (actualTags.length < wingSpec.searchTerms.length) {
         result.diff.push({ field: 'searchTermsCount', expected: wingSpec.searchTerms.length, actual: actualTags.length });
       }
@@ -381,18 +384,19 @@ async function fillWing({ page, spec, save = false }) {
 
     // 5) 고시 상품군
     if (wingSpec.notice && wingSpec.notice.group) {
-      const actGroup = dom.noticeGroup;
-      if (actGroup && !actGroup.includes(wingSpec.notice.group)) {
+      const actGroup = dom.noticeGroup || null;
+      if (!actGroup || !actGroup.includes(wingSpec.notice.group)) {
         result.diff.push({ field: 'noticeGroup', expected: wingSpec.notice.group, actual: actGroup });
       }
     }
 
     // 6) 제조사
-    const actMfg = storeProd?.manufacturer || dom.manufacturer;
-    if (wingSpec.manufacturer && actMfg && !actMfg.includes(wingSpec.manufacturer)) {
-      result.diff.push({ field: 'manufacturer', expected: wingSpec.manufacturer, actual: actMfg });
+    if (wingSpec.manufacturer) {
+      const actMfg = (storeProd && storeProd.manufacturer) ? storeProd.manufacturer : dom.manufacturer;
+      if (!actMfg || !actMfg.includes(wingSpec.manufacturer)) {
+        result.diff.push({ field: 'manufacturer', expected: wingSpec.manufacturer, actual: actMfg });
+      }
     }
-
     // 최종 성공 여부: diff 0개 AND errors 0개
     result.success = (result.diff.length === 0 && result.errors.length === 0);
   } catch (e) {
