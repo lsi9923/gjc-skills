@@ -77,3 +77,9 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
   3) 소스 자료(URL/PDF/유튜브/텍스트) 추가 (`notebooklm source add <자료경로>`) 또는 웹/드라이브 딥 리서치 (`notebooklm source add-research "<주제>" --mode deep --import-all`)
   4) 출처 기반 질의응답(`ask`) 또는 아티팩트 생성(`generate audio/video/quiz/flashcards/mind-map/slide-deck/report`)
   5) 생성물 로컬 파일 다운로드(`notebooklm download <종류> <경로>`) 및 사용자 인도 완료
+
+## 8. Aside 브라우저 복구 및 창 활성화 규칙 (재부팅 대응)
+- **증상**: 재부팅 후 OmO 또는 브라우저 조작 에이전트가 `Aside u0 프로필에 브라우저 창이 없음` 오류로 조작 불가한 경우.
+- **원인**: Aside 프로세스는 백그라운드에 떠 있으나 메인 GUI 창(`MainWindowTitle`)이 생성/활성화되지 않음.
+- **해결**: PowerShell에서 `Start-Process 'C:\Program Files\Aside\Application\Aside.exe'` 실행으로 창을 띄운 뒤 REPL에 재접속한다.
+- **확인**: `Get-Process Aside | Where-Object { $_.MainWindowTitle }` 로 MainWindowTitle 있는 창 존재 여부를 반드시 확인한다.
