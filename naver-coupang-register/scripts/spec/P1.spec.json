@@ -8,8 +8,9 @@
     "optionRows": [
       {
         "values": ["블루 풀 세트"],
-        "originalPrice": null,
+        "originalPrice": 33500,
         "salePrice": 26800,
+        "discount": 6700,
         "stock": 999
       }
     ],
@@ -51,7 +52,7 @@
     "optionRows": [
       {
         "values": ["블루", "1세트"],
-        "originalPrice": 31900,
+        "originalPrice": 33500,
         "salePrice": 26800,
         "stock": 999
       }

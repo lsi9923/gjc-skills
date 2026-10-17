@@ -8,8 +8,9 @@
     "optionRows": [
       {
         "values": ["연보라색 2개 (1세트)"],
-        "originalPrice": 16900,
+        "originalPrice": 17400,
         "salePrice": 13900,
+        "discount": 3500,
         "stock": 999
       }
     ],
@@ -49,7 +50,7 @@
     "optionRows": [
       {
         "values": ["연보라색", "Free", "2개"],
-        "originalPrice": 16900,
+        "originalPrice": 17400,
         "salePrice": 13900,
         "stock": 999
       }
@@ -63,7 +64,7 @@
     "manufacturer": "협력업체",
     "origin": "중국",
     "notice": {
-      "group": "기타 재화",
+      "group": "가구",
       "fields": {
         "품명 및 모델명": "사계절 식탁 의자 커버",
         "재질": "폴리에스터, 스판덱스 (공급처 표기)",

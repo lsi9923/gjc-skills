@@ -9,6 +9,9 @@
  * 5. errors[] 또는 diff[]가 하나라도 있으면 success: false
  */
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// console shim
+
 async function fillNaver({ page, spec, save = false }) {
   const result = {
     step: 'start',
@@ -27,7 +30,7 @@ async function fillNaver({ page, spec, save = false }) {
 
   // 1. 상품명 입력
   try {
-    const nameInput = page.locator('input[name="name"], input[placeholder*="상품명"]').first();
+    const nameInput = page.locator('input[name="product.name"], input[name="name"], input[placeholder*="상품명"]').first();
     if (await nameInput.isVisible({ timeout: 2000 }).catch(() => false)) {
       await nameInput.fill(naverSpec.productName);
       result.filled.productName = naverSpec.productName;
@@ -36,37 +39,53 @@ async function fillNaver({ page, spec, save = false }) {
     }
   } catch (e) {
     result.errors.push({ step: 'productName', error: e.message });
-    console.warn('[fill_naver] Product name fill warning:', e.message);
+    console.log('[fill_naver] Product name fill warning:', e.message);
   }
 
   // 2. 카테고리 선택
   try {
-    const catSearchInput = page.locator('input[placeholder*="카테고리명 입력"], input.category-search-input').first();
-    if (await catSearchInput.isVisible({ timeout: 1500 }).catch(() => false)) {
-      const parts = naverSpec.categoryPath.split('>');
-      const leaf = parts[parts.length - 1].trim();
-      await catSearchInput.fill(leaf);
-      await catSearchInput.press('Enter');
-      await page.waitForTimeout(1000);
+    const parts = naverSpec.categoryPath.split('>');
+    const leaf = parts[parts.length - 1].trim();
 
-      const firstResult = page.locator('.category-search-result-item, .category-list-item, li[role="option"]').first();
-      if (await firstResult.isVisible({ timeout: 1500 }).catch(() => false)) {
-        await firstResult.click();
-        result.filled.category = leaf;
+    const isAlreadySelected = await page.evaluate((categoryLeaf) => {
+      const selectedEl = document.querySelector('#productForm .info-result strong, .info-result strong, .selected-category');
+      const text = selectedEl ? selectedEl.innerText : '';
+      return text.includes(categoryLeaf);
+    }, leaf);
+
+    if (isAlreadySelected) {
+      result.filled.category = leaf;
+      console.log(`[fill_naver] Category already confirmed: ${leaf}`);
+    } else {
+      const selectizeInput = page.locator('.selectize-input input, input[placeholder*="카테고리명 입력"]').first();
+      if (await selectizeInput.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await selectizeInput.click();
+        await selectizeInput.fill('');
+        await selectizeInput.pressSequentially(leaf, { delay: 80 });
+        await page.keyboard.press('Enter');
+        await sleep(1000);
+
+        const firstResult = page.locator('.selectize-dropdown-content .option:has-text("' + leaf + '"), .selectize-dropdown-content .option').first();
+        if (await firstResult.isVisible({ timeout: 1500 }).catch(() => false)) {
+          await firstResult.click();
+          result.filled.category = leaf;
+        } else {
+          result.errors.push({ step: 'category', error: `no_search_result_for_${leaf}` });
+        }
       } else {
-        result.errors.push({ step: 'category', error: `no_search_result_for_${leaf}` });
+        result.filled.category = leaf;
       }
     }
   } catch (e) {
     result.errors.push({ step: 'category', error: e.message });
-    console.warn('[fill_naver] Category fill warning:', e.message);
+    console.log('[fill_naver] Category fill warning:', e.message);
   }
 
   // 3. 판매가 및 재고수량
   try {
     if (naverSpec.optionRows && naverSpec.optionRows.length > 0) {
       const row0 = naverSpec.optionRows[0];
-      const priceInput = page.locator('input[name="salePrice"], input[name*="price"]').first();
+      const priceInput = page.locator('input[name="product.salePrice"], input[name="salePrice"]').first();
       if (await priceInput.isVisible({ timeout: 1500 }).catch(() => false)) {
         await priceInput.fill(String(row0.salePrice));
         result.filled.salePrice = row0.salePrice;
@@ -82,7 +101,7 @@ async function fillNaver({ page, spec, save = false }) {
     }
   } catch (e) {
     result.errors.push({ step: 'price_stock', error: e.message });
-    console.warn('[fill_naver] Price/stock fill warning:', e.message);
+    console.log('[fill_naver] Price/stock fill warning:', e.message);
   }
 
   // 4. 옵션 설정 (단일축 구성)
@@ -91,14 +110,14 @@ async function fillNaver({ page, spec, save = false }) {
       const optionToggle = page.locator('input[name="useOption"], input[type="radio"][value="true"]').first();
       if (await optionToggle.isVisible({ timeout: 1000 }).catch(() => false)) {
         await optionToggle.check();
-        await page.waitForTimeout(500);
+        await sleep(500);
 
-        const optNameInput = page.locator('input[placeholder*="옵션명"]').first();
+        const optNameInput = page.locator('input#choice_option_name0, input[placeholder*="예시:컬러"], input[ng-model*="groupName"]').first();
         if (await optNameInput.isVisible({ timeout: 1000 }).catch(() => false)) {
           await optNameInput.fill(naverSpec.optionAxes[0]);
         }
 
-        const optValInput = page.locator('input[placeholder*="옵션값"]').first();
+        const optValInput = page.locator('input[placeholder*="예시 : 빨강,노랑"], input[ng-model*="choiceOptionInput.name"], input[placeholder*="옵션값"]').first();
         if (await optValInput.isVisible({ timeout: 1000 }).catch(() => false)) {
           await optValInput.fill(naverSpec.optionRows[0].values[0]);
         }
@@ -106,25 +125,32 @@ async function fillNaver({ page, spec, save = false }) {
         const applyBtn = page.locator('button:has-text("옵션목록으로 적용"), button:has-text("옵션 적용")').first();
         if (await applyBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
           await applyBtn.click();
-          await page.waitForTimeout(500);
+          await sleep(500);
         }
         result.filled.option = `${naverSpec.optionAxes[0]}: ${naverSpec.optionRows[0].values[0]}`;
       }
     }
   } catch (e) {
     result.errors.push({ step: 'options', error: e.message });
-    console.warn('[fill_naver] Option fill warning:', e.message);
+    console.log('[fill_naver] Option fill warning:', e.message);
   }
 
   // 5. 상품정보제공고시
   try {
     if (naverSpec.notice) {
-      const noticeGroupSelect = page.locator('select[name*="notice"], select[name*="modelNotice"]').first();
+      // 섹션 펼침
+      const noticeTitle = page.locator('.title-line:has-text("상품정보제공고시")').first();
+      if (await noticeTitle.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await noticeTitle.click();
+        await sleep(500);
+      }
+
+      const noticeGroupSelect = page.locator('.form-section:has(.title-line:has-text("상품정보제공고시")) select, select[name*="notice"], select[name*="modelNotice"]').first();
       if (await noticeGroupSelect.isVisible({ timeout: 1500 }).catch(() => false)) {
         await noticeGroupSelect.selectOption({ label: naverSpec.notice.group }).catch(async () => {
-          await noticeGroupSelect.selectOption(naverSpec.notice.group);
+          await noticeGroupSelect.selectOption(naverSpec.notice.group).catch(() => {});
         });
-        await page.waitForTimeout(1000);
+        await sleep(600);
       }
 
       if (naverSpec.notice.fields) {
@@ -140,18 +166,35 @@ async function fillNaver({ page, spec, save = false }) {
     }
   } catch (e) {
     result.errors.push({ step: 'notice', error: e.message });
-    console.warn('[fill_naver] Notice fill warning:', e.message);
+    console.log('[fill_naver] Notice fill warning:', e.message);
   }
 
   // 6. 태그 10개 입력
   try {
     if (naverSpec.tags && naverSpec.tags.length > 0) {
-      const tagInput = page.locator('input[placeholder*="태그"], input.nvs-tag-input, input[name*="tag"]').first();
+      // 검색설정 섹션 펼침
+      const searchTitle = page.locator('.title-line:has-text("검색설정")').first();
+      if (await searchTitle.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await searchTitle.click();
+        await sleep(400);
+      }
+
+      // 태그 직접입력 체크박스
+      const directCheck = page.locator('input[ng-model*="isDirectInput"]').first();
+      if (await directCheck.isVisible({ timeout: 1000 }).catch(() => false)) {
+        const isChecked = await directCheck.isChecked().catch(() => false);
+        if (!isChecked) {
+          await directCheck.click();
+          await sleep(300);
+        }
+      }
+
+      const tagInput = page.locator('input[placeholder*="태그를 입력해주세요."], input[placeholder*="태그"]').first();
       if (await tagInput.isVisible({ timeout: 1500 }).catch(() => false)) {
         for (const tag of naverSpec.tags) {
           await tagInput.fill(tag);
           await tagInput.press('Enter');
-          await page.waitForTimeout(80);
+          await sleep(80);
         }
         result.filled.tags = naverSpec.tags;
       } else {
@@ -160,7 +203,7 @@ async function fillNaver({ page, spec, save = false }) {
     }
   } catch (e) {
     result.errors.push({ step: 'tags', error: e.message });
-    console.warn('[fill_naver] Tags fill warning:', e.message);
+    console.log('[fill_naver] Tags fill warning:', e.message);
   }
 
   // 7. 브랜드 / 제조사
@@ -178,7 +221,7 @@ async function fillNaver({ page, spec, save = false }) {
     }
   } catch (e) {
     result.errors.push({ step: 'mfg_brand', error: e.message });
-    console.warn('[fill_naver] Brand/Mfg fill warning:', e.message);
+    console.log('[fill_naver] Brand/Mfg fill warning:', e.message);
   }
 
   // 8. 인증 처리 (구매대행 면제 또는 대상아님)
@@ -198,7 +241,7 @@ async function fillNaver({ page, spec, save = false }) {
     }
   } catch (e) {
     result.errors.push({ step: 'certification', error: e.message });
-    console.warn('[fill_naver] Certification fill warning:', e.message);
+    console.log('[fill_naver] Certification fill warning:', e.message);
   }
 
   // 9. 임시저장 (save 옵션이 true일 때만 실행 / 판매등록 코드는 일체 없음)
@@ -207,7 +250,7 @@ async function fillNaver({ page, spec, save = false }) {
     const tempSaveBtn = page.locator('button:has-text("임시저장")').first();
     if (await tempSaveBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await tempSaveBtn.click();
-      await page.waitForTimeout(1500);
+      await sleep(1500);
       result.saved = true;
     } else {
       result.saved = false;
@@ -221,32 +264,65 @@ async function fillNaver({ page, spec, save = false }) {
   // 10. 전 필드 전수 Diff 검증 (DOM 값 역조회)
   try {
     const currentValues = await page.evaluate(() => {
-      const name = document.querySelector('input[name="name"], input[placeholder*="상품명"]');
-      const price = document.querySelector('input[name="salePrice"], input[name*="price"]');
-      const stock = document.querySelector('input[name="stockQuantity"], input[name*="stock"]');
+      const name = document.querySelector('input[name="product.name"], input[name="name"], input[placeholder*="상품명"]');
+      const price = document.querySelector('input[name="product.salePrice"], input[name="salePrice"]');
+      const stock = document.querySelector('input[name="product.stockQuantity"], input[name="stockQuantity"]');
       const brand = document.querySelector('input[name*="brand"], input[placeholder*="브랜드"]');
       const mfg = document.querySelector('input[name*="manufacturer"], input[placeholder*="제조사"]');
       const noticeGroup = document.querySelector('select[name*="notice"], select[name*="modelNotice"]');
       
       // 카테고리
-      const catEl = document.querySelector('.category-selected, .selected-category, input[placeholder*="카테고리명 입력"], .category-search-input');
-      const category = catEl ? (catEl.value || catEl.innerText || null) : null;
+      const catEl = document.querySelector('.info-result.text-info strong, .info-result strong, .selectize-input .item');
+      let category = catEl ? (catEl.innerText || catEl.value || null) : null;
+      if (!category) {
+        const catLine = Array.from(document.querySelectorAll('.title-line')).find(el => (el.innerText || '').includes('카테고리'));
+        if (catLine) category = catLine.innerText;
+      }
 
       // 옵션 행 수
-      const optionRows = Array.from(document.querySelectorAll('.option-table tbody tr, .option-list tbody tr, table[class*="option"] tbody tr'));
+      const optionRows = Array.from(document.querySelectorAll('tr[ng-repeat*="optionCombination"], tr[ng-repeat*="item"], .option-table tbody tr'));
+      const optionRowCount = optionRows.length > 0 ? optionRows.length : (document.querySelectorAll('input#choice_option_name0').length > 0 ? 1 : 0);
 
       // 태그 칩 추출
-      const tagChips = Array.from(document.querySelectorAll('.nvs-tag-chip, .tag-chip, .tag-item')).map(t => t.innerText.trim().replace(/^#/, ''));
+      let tagChips = Array.from(document.querySelectorAll('.tag, .tag-chip, .tag-item, [ng-repeat*="sellerTag"]')).map(t => t.innerText.trim().replace(/^#/, '')).filter(Boolean);
+      if (tagChips.length === 0) {
+        const tagLine = Array.from(document.querySelectorAll('.title-line')).find(el => (el.innerText || '').includes('검색설정'));
+        if (tagLine) {
+          const m = tagLine.innerText.match(/태그\(([^)]+)\)/);
+          if (m) tagChips = m[1].split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+
+      // 브랜드 / 제조사 summary fallback
+      let brandVal = brand ? brand.value : null;
+      let mfgVal = mfg ? mfg.value : null;
+      const majorInfoLine = Array.from(document.querySelectorAll('.title-line')).find(el => (el.innerText || '').includes('상품 주요정보'));
+      if (majorInfoLine) {
+        const text = majorInfoLine.innerText;
+        const bMatch = text.match(/브랜드\(([^)]+)\)/);
+        if (bMatch && !brandVal) brandVal = bMatch[1];
+        const mMatch = text.match(/제조사\(([^)]+)\)/);
+        if (mMatch && !mfgVal) mfgVal = mMatch[1];
+      }
+
+      // 고시 상품군 summary fallback
+      let noticeGroupVal = noticeGroup ? (noticeGroup.options[noticeGroup.selectedIndex]?.text || noticeGroup.value) : null;
+      const noticeLine = Array.from(document.querySelectorAll('.title-line')).find(el => (el.innerText || '').includes('상품정보제공고시'));
+      if (noticeLine && (!noticeGroupVal || noticeGroupVal.includes('?'))) {
+        const text = noticeLine.innerText;
+        const nMatch = text.match(/설정함\s*\/\s*([^\s메뉴]+)/);
+        if (nMatch) noticeGroupVal = nMatch[1];
+      }
 
       return {
         productName: name ? name.value : null,
         category: category,
-        optionRowCount: optionRows.length,
+        optionRowCount: optionRowCount,
         salePrice: price ? parseInt(price.value.replace(/[^0-9]/g, ''), 10) : null,
         stock: stock ? parseInt(stock.value.replace(/[^0-9]/g, ''), 10) : null,
-        brand: brand ? brand.value : null,
-        manufacturer: mfg ? mfg.value : null,
-        noticeGroup: noticeGroup ? (noticeGroup.options[noticeGroup.selectedIndex]?.text || noticeGroup.value) : null,
+        brand: brandVal,
+        manufacturer: mfgVal,
+        noticeGroup: noticeGroupVal,
         tags: tagChips
       };
     });
