@@ -93,3 +93,17 @@ python C:/Users/imda0/.gjc/agent/skills/sourcing-top50-curator/scripts/generate_
     Start-Process 'C:\Program Files\Aside\Application\Aside.exe' -ArgumentList <URL들>
     ```
   - **확인**: `Get-Process Aside | Where-Object { $_.MainWindowTitle }` 의 `MainWindowTitle`에 해당 사이트 제목이 표시되는지 검증하고 사용자 확인을 거친다.
+
+## 9. 상세페이지 자동화 판별 격리 및 완주 검증 규칙 (결과 폴더 및 LastWriteTime 검증)
+- **증상**: 상세페이지 자동화 실행 후 '13섹션 완주'로 보고했으나, 실제 산출물을 확인하면 일부 섹션(예: 02~10)이 과거 archive 캐시 파일이거나 다른 판(GPT판 등)에서 복사해 온 파일이 혼용되어 진정한 실시간 완주가 아님.
+- **원인**: 이전 실행 결과 폴더 재사용, 타 판본 폴더로부터의 파일 복사/참조, 또는 캐시 검증 미흡.
+- **해결 원칙 (완전 분리 및 실시간 완주 검증)**:
+  1. **판별 결과 폴더 완전 분리**:
+     - GPT판(추가기능판): `Desktop/상세페이지_자동화_추가기능_결과`
+     - 플러그인판: `Desktop/상세페이지_자동화_플러그인판_결과`
+     - 판별 소스 코드와 실행 환경은 서로의 결과 폴더, 캐시, 아카이브를 절대로 참조하거나 복사하지 않는다.
+  2. **완주 판정 기준 (LastWriteTime 검증)**:
+     - 단순히 파일 개수가 13개이거나 detail_page.png가 존재한다는 이유만으로 완주로 판정하지 않는다.
+     - 반드시 생성된 **모든 섹션(01~13)과 합본(detail_page.png), 썸네일 파일들의 LastWriteTime(수정 시각)이 이번 실행 런타임 구간 내에 신규 생성된 시각**인지 확인되어야만 완주로 인정한다.
+  3. **섹션별 시각 표 보고 의무**:
+     - 완주 보고 시 반드시 각 섹션 파일명, 용량, 해상도, 그리고 **섹션별 LastWriteTime 표**를 첨부하여 전수 실시간 완주를 입증한다.
