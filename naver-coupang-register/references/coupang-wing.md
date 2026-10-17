@@ -114,4 +114,5 @@ URL: `https://wing.coupang.com/tenants/seller-web/vendor-inventory/formV2` (상�
 - "필수 구매옵션" 경고 → 해당 옵션을 실제 값으로 추가. 값을 모르면 사용자확인.
 - 이미지 반려/업로드 실패 → 규격(정사각형, 3MB) 확인 후 재업로드.
 - 캡차·보안문자·재로그인 → 사용자에게 넘긴다. **우회하지 않는다.**
+- 중간저장 배너/목록 열기 ("Node is not an Element" 에러) → 텍스트 노드 클릭 시 발생하므로 `page.getByText(/중간저장 된 내용/).first()` locator로 클릭하고, 실패 시 `boundingBox()` 중심 좌표로 `page.mouse.click(x, y)`를 실행한다. 목록 모달에 저장 행(`savedRows`)이 정상 표시되는지 확인한다.
 - 새로 알게 된 화면 동작은 `memory/sites/wing.coupang.com.md` History 에 추가한다.
